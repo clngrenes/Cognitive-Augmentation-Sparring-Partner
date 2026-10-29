@@ -1,0 +1,6 @@
+{
+  "name": "sparring",
+  "private": true,
+  "description": "Prototyp eines Schreibinterfaces mit KI-Sparringspartner",
+  "engines": { "node": ">=18" }
+}

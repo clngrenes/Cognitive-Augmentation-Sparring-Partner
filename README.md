@@ -1,27 +1,29 @@
 # Sparring
 
-Prototyp eines Schreibinterfaces. Links schreibst du in Blöcken (wie in Craft oder Notion), rechts liest eine KI mit, fragt nach, hält Annahmen fest und denkt weiter. Sie schreibt nie in deinen Text.
+Prototyp eines Schreibinterfaces. Links schreibst du in Blöcken (wie in Craft oder Notion), rechts denkt eine KI mit: Bei jedem Enter schreibt sie einen kurzen Nebengedanken zu dem, was du gerade geschrieben hast. Sie schreibt nie in deinen Text.
 
-Reines HTML, CSS und JavaScript, kein Build-Schritt. `index.html` im Browser öffnen oder einen statischen Server starten (`npx serve`).
+Reines HTML, CSS und JavaScript plus eine Vercel-Funktion (`api/think.js`) für die KI.
 
 ## Bedienung
 
-- Enter beginnt einen neuen Block, Backspace am Anfang führt Blöcke zusammen.
+- Enter beendet einen Block, die KI antwortet rechts.
 - `# ` macht einen Titel, `- ` eine Liste.
-- Esc markiert einen Block. Dann: Pfeile bewegen die Auswahl, Entf löscht, Enter schreibt weiter, Strg/⌘ + Umschalt + Pfeil verschiebt den Block.
-- Der Griff links neben einem Block markiert ihn oder zieht ihn an eine neue Stelle.
-- Strg/⌘ + Enter lässt die KI sofort nachhaken.
-- Ein Klick auf eine Anmerkung öffnet links einen Block für deine Antwort.
-- Oben stellst du ein, wie oft die KI sich meldet: Still, Am Rand, Im Gespräch.
+- Ein Klick auf einen Gedanken der KI öffnet links einen Block für deine Antwort.
+- Esc markiert einen Block (Pfeile bewegen die Auswahl, Entf löscht, Enter schreibt weiter).
+
+## KI einrichten
+
+Die Funktion `api/think.js` ruft Gemini auf. Der Schlüssel steht **nie** im Code, sondern nur als Umgebungsvariable in Vercel:
+
+1. Vercel → Projekt → Settings → Environment Variables
+2. `GEMINI_API_KEY` mit deinem Schlüssel anlegen (Production, Preview, Development)
+3. Optional `GEMINI_MODEL` setzen (Standard: `gemini-2.5-flash`)
+4. Neu deployen, damit die Variable greift
+
+Ohne Schlüssel antwortet die Seite mit wenigen einfachen Regel-Fragen. Die Funktion begrenzt Anfragen pro IP und die Länge der Eingabe.
 
 ## Interaktionsprinzipien
 
-1. Schweigen ist der Normalfall. Die KI spricht erst nach einer Denkpause, nie mitten im Satz.
-2. Fragen vor Antworten, und kein Einfügen-Knopf.
-3. Jede Anmerkung zeigt auf den Satz, den sie meint (Maus über die Anmerkung).
-4. Höchstens drei Anmerkungen bleiben kräftig sichtbar, ältere verblassen.
-5. Zustimmung ist keine Anmerkung: Die KI meldet sich nur bei Annahmen, Lücken und Spannungen.
-
-## Stand
-
-Die KI ist simuliert. Die Anmerkungen kommen aus Regeln (`app.js`, Funktion `rulesFor`), nicht aus einem Sprachmodell. Pausenerkennung, Timing und Layout sind echt. Der nächste Schritt ist ein echtes Modell hinter der Schnittstelle.
+1. Die KI spricht erst, wenn du einen Block abschließt, nie mitten im Satz.
+2. Kurz: höchstens zwei Sätze. Fragen, Gegenpositionen und Verbindungen statt Lob oder Bewertung.
+3. Kein Einfügen-Knopf: Der Text bleibt deiner.
