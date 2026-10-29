@@ -1,15 +1,17 @@
 # Sparring
 
-Prototyp eines Schreibinterfaces. Links schreibst du in Blöcken (wie in Craft oder Notion), rechts denkt eine KI mit: Bei jedem Enter schreibt sie einen kurzen Nebengedanken zu dem, was du gerade geschrieben hast. Sie schreibt nie in deinen Text.
+Prototyp eines Schreibinterfaces. Du schreibst auf liniertem Papier in Blöcken (wie in Craft oder Notion), rechts denkt eine KI mit: Bei jedem Enter schreibt sie einen kurzen Nebengedanken zu dem, was du gerade geschrieben hast. Sie schreibt nie in deinen Text.
 
 Reines HTML, CSS und JavaScript plus eine Vercel-Funktion (`api/think.js`) für die KI.
 
 ## Bedienung
 
+- Mehrere Notizzettel: Der aktive liegt vorn, die anderen schauen links und rechts heraus. Unten wechselst du per Reiter, `+` legt einen neuen an, "Löschen" oben rechts entfernt ihn (zweimal klicken). Alles bleibt im Browser gespeichert.
 - Enter beendet einen Block, die KI antwortet rechts.
 - `# ` macht einen Titel, `- ` eine Liste.
 - Ein Klick auf einen Gedanken der KI öffnet links einen Block für deine Antwort.
 - Esc markiert einen Block (Pfeile bewegen die Auswahl, Entf löscht, Enter schreibt weiter).
+- Die Beiträge der KI erscheinen Wort für Wort neben deinem Block.
 
 ## KI einrichten
 
