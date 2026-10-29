@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sparring beim Schreiben</title>
+  <meta name="description" content="Prototyp eines Schreibinterfaces: Links schreibst du in Blöcken, rechts fragt eine KI live nach und denkt mit.">
+  <meta name="theme-color" content="#0b0b0c">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23161617'/%3E%3Crect x='7' y='9' width='9' height='3' rx='1.5' fill='%23ececec'/%3E%3Crect x='7' y='15' width='7' height='3' rx='1.5' fill='%23ececec'/%3E%3Crect x='18' y='15' width='7' height='3' rx='1.5' fill='%23ff7a50'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="top__brand">
+      <span class="top__name">Sparring</span>
+      <span class="status" id="statusWrap"><i class="status__dot"></i><span id="status">liest mit</span></span>
+    </div>
+    <div class="seg" id="mode" role="group" aria-label="Dosierung der KI">
+      <button type="button" data-mode="still" aria-pressed="false">Still</button>
+      <button type="button" data-mode="rand" aria-pressed="true">Am Rand</button>
+      <button type="button" data-mode="gespraech" aria-pressed="false">Im Gespräch</button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <div class="card">
+      <div class="sheet" id="sheet" tabindex="-1" aria-label="Dokument"></div>
+    </div>
+  </main>
+
+  <footer class="foot">
+    <div class="foot__tools">
+      <button type="button" class="link" id="play">Beispiel abspielen</button>
+      <button type="button" class="link" id="clear">Leeres Blatt</button>
+    </div>
+    <p class="foot__stats" id="stats"></p>
+    <p>Enter beginnt einen neuen Block, <kbd>#</kbd> oder <kbd>-</kbd> mit Leerzeichen macht Titel und Liste, <kbd>Esc</kbd> markiert einen Block, <kbd>Strg/⌘</kbd> + <kbd>Enter</kbd> lässt die KI sofort nachhaken. Ein Klick auf eine Anmerkung öffnet links deine Antwort.</p>
+    <p>Die KI ist hier simuliert: Die Anmerkungen kommen aus Regeln, nicht aus einem Sprachmodell. Pausenerkennung, Timing und Layout sind echt. Sie schreibt nie in deinen Text.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
