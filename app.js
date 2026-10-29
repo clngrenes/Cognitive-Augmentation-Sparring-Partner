@@ -13,9 +13,9 @@
 
   var TITLE = 'Unsichtbare Technik';
   var P1 = 'Je selbstverständlicher proaktive Systeme und IoT-Geräte werden, etwa der Aufzug im Büro oder das Thermostat zuhause, desto weniger müssen wir mit Technik interagieren. Alles wird einfach zu Daten und fließt direkt in unsere persönlichen Systeme. Manuelle Eingabe gehört damit der Vergangenheit an.';
-  var SEED_NOTE = 'Wenn die Umgebung alles über Daten vorwegnimmt: Verschwindet echte Interaktion mit Technik ganz, oder verlagert sie sich nur hinter die Kulissen?';
+  var SEED_NOTE = 'Mark Weiser nannte das 1991 „Ubiquitous Computing“: Technik, die verschwindet. Der Preis: Wer nichts mehr bedient, merkt auch nicht mehr, wann für ihn entschieden wird.';
   var SEED_REPLY = 'Was meinst du damit?';
-  var SEED_ANSWER = 'Du schreibst, dass wir kaum noch mit Technik interagieren müssen. Ich frage, ob die Interaktion wegfällt oder nur unsichtbar wird, denn dann entscheidet jemand anderes, was zu Daten wird.';
+  var SEED_ANSWER = 'Dass unsichtbare Technik nicht neutral ist: Das Thermostat, das vorausschauend heizt, hat schon entschieden, was du brauchst. Bedienen war auch ein Moment, in dem du Nein sagen konntest.';
 
   var PLACEHOLDER = { p: 'Schreib einen Gedanken …', h1: 'Titel', li: 'Listenpunkt' };
   var MIN_THINKING_MS = 700;
@@ -136,6 +136,13 @@
     updateHasNotes(row);
     return art._note;
   }
+  function renderOffline(row) {
+    var p = el('p', 'note note--off', 'Keine Verbindung zur KI.');
+    p.classList.add('is-in');
+    row._ai.appendChild(p);
+    updateHasNotes(row);
+    setTimeout(function () { p.remove(); updateHasNotes(row); }, 6000);
+  }
   function thinking() {
     var t = el('div', 'thinking');
     t.setAttribute('aria-label', 'Die KI überlegt');
@@ -163,16 +170,16 @@
   }
 
   function clean(t) {
-    t = String(t || '').replace(/[*_`#>]+/g, '').replace(/\s+/g, ' ').trim();
-    if (t.length > 260) {
-      var cut = t.slice(0, 260), end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '), cut.lastIndexOf('! '));
+    t = String(t || '').replace(/^\s*(Du|Beitrag)\s*:\s*/i, '').replace(/[*_`#>]+/g, '').replace(/\s+/g, ' ').trim();
+    if (t.length > 320) {
+      var cut = t.slice(0, 320), end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '), cut.lastIndexOf('! '));
       t = end > 80 ? cut.slice(0, end + 1) : cut.slice(0, cut.lastIndexOf(' ')) + '…';
     }
     return t;
   }
   function fetchThought(messages) {
     var ctrl = new AbortController();
-    var timer = setTimeout(function () { ctrl.abort(); }, 15000);
+    var timer = setTimeout(function () { ctrl.abort(); }, 40000);
     return fetch('/api/think', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -188,36 +195,24 @@
     });
   }
 
-  /* Notfall, wenn der Server nicht antwortet (zum Beispiel noch kein Schlüssel hinterlegt): wenige kurze Fragen aus Regeln */
-  function localThought(row, txt) {
-    if (row._replyTo) return 'Und wenn das Gegenteil stimmt, was ändert sich dann?';
-    var low = txt.toLowerCase(), m;
-    if (/interaktion|interagier/.test(low) && /technik|daten|system/.test(low)) return SEED_NOTE;
-    m = low.match(/\b(immer|nie|niemals|alle|alles|jeder|jede|niemand|nichts|stets|überall)\b/);
-    if (m) return '„' + m[0] + '“? Fällt dir ein Fall ein, in dem das nicht stimmt?';
-    m = low.match(/\b(einfach|besser|gut|schlecht|intuitiv|modern|smart|wichtig|klar)\b/);
-    if (m) return 'Was heißt „' + m[0] + '“ hier konkret?';
-    if (txt.length >= 60) return 'Was wäre das Gegenteil davon, und wer würde es vertreten?';
-    return '';
-  }
-
   function requestThought(row) {
     var txt = text(row._blk).trim();
     if (row.dataset.type === 'h1' || !txt) return;
     var gen = state.gen, started = Date.now();
     var th = thinking();
     row._ai.appendChild(th);
-    function show(t) {
+    function show(t, offline) {
       setTimeout(function () {
         if (gen !== state.gen) return;
         th.remove();
         if (row.isConnected && t) renderNote(row, t, txt);
+        else if (row.isConnected && offline) renderOffline(row);
         else updateHasNotes(row);
       }, Math.max(0, MIN_THINKING_MS - (Date.now() - started)));
     }
     fetchThought(buildMessages(row))
       .then(function (t) { show(clean(t)); })
-      .catch(function () { show(localThought(row, txt)); });
+      .catch(function () { show(null, true); });
   }
 
   function openReply(note) {

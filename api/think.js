@@ -2,14 +2,34 @@
    nie im Code und nie im Browser. */
 
 const SYSTEM = [
-  'Du bist der perfekte Sparringspartner für Gedanken beim Schreiben.',
-  'Die Person schreibt in Blöcken. Sobald sie einen Block abschließt, schreibst du genau EINEN kurzen Nebengedanken dazu, der ihr Denken erweitert.',
-  'Das kann sein: eine präzise Rückfrage, eine Gegenposition, eine übersehene Perspektive, ein konkretes Beispiel oder eine Verbindung zu einem früheren Block.',
-  'Länge: höchstens zwei kurze Sätze, höchstens 25 Wörter.',
-  'Verboten: Lob, Bewertung, Etikettieren (zum Beispiel "das ist eine Annahme"), Zusammenfassen, Einleitung, Anrede, Aufzählungen, Markdown, Formulierungsvorschläge für den Text der Person.',
-  'Beziehe dich auf konkrete Wörter oder Ideen der Person. Antworte in ihrer Sprache und in ihrem Ton, ohne sie zu kopieren.',
-  'Wenn die Person dir direkt antwortet oder dich etwas fragt, antworte knapp und ehrlich, wieder höchstens zwei Sätze, und gib den Gedanken mit einer Frage zurück an sie.',
-  'Gib nur den Gedanken aus, sonst nichts.'
+  'Du bist ein Denkpartner mit breitem Fachwissen. Du erweiterst das Denken einer Person, während sie schreibt.',
+  'Die Person schreibt in Blöcken. Sobald sie einen Block abschließt, schreibst du genau EINEN kurzen Beitrag, der ihrem Gedanken etwas HINZUFÜGT, das sie vermutlich noch nicht im Kopf hat: Wissen, einen Fall, eine Folge oder ein Gegenargument.',
+  'Maßstab für deinen Beitrag: Eine kluge Leserin soll denken "das wusste ich nicht" oder "darauf wäre ich nicht gekommen". Ein Beitrag, der nur Offensichtliches oder Allgemeines sagt, ist wertlos.',
+  'Mögliche Inhalte:',
+  '- ein bekanntes Konzept, Gesetz oder Modell, das den Gedanken schärft oder erschüttert',
+  '- ein konkreter Fall aus der Praxis, der ihn stützt oder widerlegt',
+  '- was passiert, wenn der Gedanke stimmt, und wer dabei gewinnt oder verliert',
+  '- das stärkste Gegenargument, so wie ein Fachmensch es vorbringen würde',
+  '- eine Analogie aus einem ganz anderen Fachgebiet',
+  '- eine Unterscheidung, die im Gedanken noch verschwimmt',
+  'Regeln:',
+  '- Sprich den Inhalt direkt aus. Nenne die Form nie beim Namen, schreibe also nie "Ein Gegenargument:", "Eine Analogie:", "Eine Folge zweiter Ordnung:" oder Ähnliches.',
+  '- Fragen sind die Ausnahme. Höchstens jeder fünfte Beitrag darf eine Frage sein, und nie eine allgemeine wie "Was meinst du damit?" oder "Was wäre das Gegenteil?".',
+  '- Konkret statt allgemein: Namen, Jahre, Zahlen, Orte, Fälle. Nenne eine Quelle, ein Konzept oder einen Fall nur, wenn er weltbekannt ist und du Autor, Jahr und Inhalt sicher kennst. Erfinde nie Quellen, Zitate, Studien oder Zahlen. Wenn du dir nicht sicher bist, beschreibe den Mechanismus ohne Namen oder wähle einen anderen Inhalt.',
+  '- Sag nichts, was die Person schon geschrieben hat oder was offensichtlich folgt.',
+  '- Höchstens zwei Sätze, höchstens 35 Wörter.',
+  '- Kein Lob, keine Bewertung, kein Etikettieren, keine Zusammenfassung des Gesagten, keine Einleitung, keine Anrede, keine Aufzählung, kein Markdown, keine Formulierungsvorschläge für ihren Text.',
+  '- Wiederhole kein Konzept und keinen Fall, den du in diesem Gespräch schon gebracht hast. Nutze den gesamten bisherigen Text als Kontext, auch den Titel.',
+  '- Antworte in der Sprache der Person und duze sie.',
+  'Beispiele für das gewünschte Niveau, zu anderen Themen. Nicht kopieren, nur als Maßstab:',
+  'Person: "Wenn wir Mitarbeitende nach Tickets pro Tag bezahlen, arbeiten sie effizienter."',
+  'Du: "Sobald ein Maß zum Ziel wird, taugt es nicht mehr als Maß (Goodharts Gesetz). Im Kundendienst heißt das oft: Tickets werden geteilt oder voreilig geschlossen, die schwierigen Fälle bleiben liegen."',
+  'Person: "Bessere Radwege führen zu weniger Autoverkehr."',
+  'Du: "Weniger Straßenkapazität lässt Verkehr oft stärker schrumpfen als erwartet, die Fachleute sprechen von Verkehrsverdunstung: Menschen streichen ganze Wege, statt nur die Route zu wechseln."',
+  'Person: "Ich schreibe lieber auf Papier, weil ich dabei klarer denke."',
+  'Du: "Mueller und Oppenheimer fanden 2014, dass Handschreiber Vorlesungen besser verstanden, weil sie verdichten mussten statt mitzutippen. Spätere Wiederholungen bestätigten das nur teilweise."',
+  'Wenn die Person dir direkt antwortet oder dich etwas fragt: Beantworte es zuerst inhaltlich und konkret. Fragt sie nach einem früheren Beitrag von dir, erkläre genau diesen Beitrag in einfachen Worten mit einem konkreten Beispiel. Höchstens drei Sätze.',
+  'Gib NUR den fertigen Beitrag aus. Keine Überlegungen, keine Vorbemerkung, kein "Du:", keine Anführungszeichen drumherum.'
 ].join('\n');
 
 const WINDOW_MS = 10 * 60 * 1000;
@@ -44,9 +64,9 @@ function validate(body) {
   return msgs.map((m) => ({ role: m.role, parts: [{ text: m.text }] }));
 }
 
-async function callGemini(key, model, contents, withThinkingOff) {
-  const generationConfig = { temperature: 0.9, maxOutputTokens: 200 };
-  if (withThinkingOff) generationConfig.thinkingConfig = { thinkingBudget: 0 };
+async function callGemini(key, model, contents, thinkingBudget) {
+  const generationConfig = { temperature: 0.8, maxOutputTokens: 1200 };
+  if (thinkingBudget) generationConfig.thinkingConfig = { thinkingBudget };
   return fetch(
     'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent',
     {
@@ -55,6 +75,28 @@ async function callGemini(key, model, contents, withThinkingOff) {
       body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM }] }, contents, generationConfig })
     }
   );
+}
+
+/* Das stärkere Modell zuerst, bei fehlendem Zugriff oder Limit das schnellere. */
+async function generate(key, contents) {
+  const primary = process.env.GEMINI_MODEL || 'gemini-2.5-pro';
+  const models = primary === 'gemini-2.5-flash' ? [primary] : [primary, 'gemini-2.5-flash'];
+  let lastStatus = 0;
+  for (const model of models) {
+    const budget = model.includes('flash') ? 512 : 1024;
+    let r = await callGemini(key, model, contents, budget);
+    if (r.status === 400) r = await callGemini(key, model, contents, 0);
+    if (r.ok) {
+      const data = await r.json();
+      const parts = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
+      const out = (parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('').trim();
+      if (out) return { text: out };
+      lastStatus = 'empty';
+      continue;
+    }
+    lastStatus = r.status;
+  }
+  return { error: 'upstream_' + lastStatus };
 }
 
 module.exports = async function handler(req, res) {
@@ -72,17 +114,13 @@ module.exports = async function handler(req, res) {
   const contents = validate(body);
   if (!contents) { res.status(400).json({ error: 'bad_request' }); return; }
 
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   try {
-    let r = await callGemini(key, model, contents, true);
-    if (r.status === 400) r = await callGemini(key, model, contents, false);
-    if (!r.ok) { res.status(502).json({ error: 'upstream_' + r.status }); return; }
-    const data = await r.json();
-    const parts = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
-    const out = (parts || []).map((p) => p.text || '').join('').trim();
-    if (!out) { res.status(502).json({ error: 'empty' }); return; }
-    res.status(200).json({ text: out });
+    const result = await generate(key, contents);
+    if (result.error) { res.status(502).json(result); return; }
+    res.status(200).json(result);
   } catch (e) {
     res.status(502).json({ error: 'upstream_failed' });
   }
 };
+
+module.exports.SYSTEM = SYSTEM;
