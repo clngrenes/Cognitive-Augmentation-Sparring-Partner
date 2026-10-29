@@ -17,7 +17,7 @@ Die Funktion `api/think.js` ruft Gemini auf. Der Schlüssel steht **nie** im Cod
 
 1. Vercel → Projekt → Settings → Environment Variables
 2. `GEMINI_API_KEY` mit deinem Schlüssel anlegen (Production, Preview, Development)
-3. Optional `GEMINI_MODEL` setzen (Standard: `gemini-2.5-pro`, bei fehlendem Zugriff oder Limit fällt die Funktion auf `gemini-2.5-flash` zurück)
+3. Optional `GEMINI_MODEL` setzen (Standard: `gemini-3.1-pro-preview`, bei fehlendem Zugriff oder Limit fällt die Funktion nacheinander auf `gemini-2.5-pro` und `gemini-2.5-flash` zurück)
 4. Neu deployen, damit die Variable greift
 
 Ohne Schlüssel zeigt die Seite „Keine Verbindung zur KI“. Die Funktion begrenzt Anfragen pro IP und die Länge der Eingabe.

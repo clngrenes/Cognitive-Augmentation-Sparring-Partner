@@ -64,9 +64,15 @@ function validate(body) {
   return msgs.map((m) => ({ role: m.role, parts: [{ text: m.text }] }));
 }
 
-async function callGemini(key, model, contents, thinkingBudget) {
-  const generationConfig = { temperature: 0.8, maxOutputTokens: 1200 };
-  if (thinkingBudget) generationConfig.thinkingConfig = { thinkingBudget };
+function thinkingFor(model, attempt) {
+  if (attempt > 0) return null;
+  if (model.startsWith('gemini-3')) return { thinkingLevel: 'low' };
+  return { thinkingBudget: model.includes('flash') ? 512 : 1024 };
+}
+
+async function callGemini(key, model, contents, thinkingConfig) {
+  const generationConfig = { temperature: model.startsWith('gemini-3') ? 1.0 : 0.8, maxOutputTokens: 1200 };
+  if (thinkingConfig) generationConfig.thinkingConfig = thinkingConfig;
   return fetch(
     'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent',
     {
@@ -77,20 +83,19 @@ async function callGemini(key, model, contents, thinkingBudget) {
   );
 }
 
-/* Das stärkere Modell zuerst, bei fehlendem Zugriff oder Limit das schnellere. */
+/* Das stärkste Modell zuerst, bei fehlendem Zugriff oder Limit das nächste. */
 async function generate(key, contents) {
-  const primary = process.env.GEMINI_MODEL || 'gemini-2.5-pro';
-  const models = primary === 'gemini-2.5-flash' ? [primary] : [primary, 'gemini-2.5-flash'];
+  const primary = process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview';
+  const models = [primary, 'gemini-2.5-pro', 'gemini-2.5-flash'].filter((m, i, a) => a.indexOf(m) === i);
   let lastStatus = 0;
   for (const model of models) {
-    const budget = model.includes('flash') ? 512 : 1024;
-    let r = await callGemini(key, model, contents, budget);
-    if (r.status === 400) r = await callGemini(key, model, contents, 0);
+    let r = await callGemini(key, model, contents, thinkingFor(model, 0));
+    if (r.status === 400) r = await callGemini(key, model, contents, thinkingFor(model, 1));
     if (r.ok) {
       const data = await r.json();
       const parts = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
       const out = (parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('').trim();
-      if (out) return { text: out };
+      if (out) return { text: out, model };
       lastStatus = 'empty';
       continue;
     }
