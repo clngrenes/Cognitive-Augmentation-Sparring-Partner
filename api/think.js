@@ -66,6 +66,7 @@ function validate(body) {
 
 function thinkingFor(model, attempt) {
   if (attempt > 0) return null;
+  if (model.includes('flash-lite')) return { thinkingLevel: 'minimal' };
   if (model.startsWith('gemini-3')) return { thinkingLevel: 'low' };
   return { thinkingBudget: model.includes('flash') ? 512 : 1024 };
 }
@@ -85,8 +86,8 @@ async function callGemini(key, model, contents, thinkingConfig) {
 
 /* Das stärkste Modell zuerst, bei fehlendem Zugriff oder Limit das nächste. */
 async function generate(key, contents) {
-  const primary = process.env.GEMINI_MODEL || 'gemini-3.1-pro-preview';
-  const models = [primary, 'gemini-2.5-pro', 'gemini-2.5-flash'].filter((m, i, a) => a.indexOf(m) === i);
+  const primary = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite-preview';
+  const models = [primary, 'gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemini-2.5-flash'].filter((m, i, a) => a.indexOf(m) === i);
   let lastStatus = 0;
   for (const model of models) {
     let r = await callGemini(key, model, contents, thinkingFor(model, 0));
