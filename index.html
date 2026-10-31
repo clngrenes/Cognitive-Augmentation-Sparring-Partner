@@ -4,17 +4,39 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Sparring beim Schreiben</title>
-  <meta name="description" content="Prototyp eines Schreibinterfaces: Notizzettel mit einer KI, die bei jedem Enter einen Gedanken danebenschreibt.">
-  <meta name="theme-color" content="#0b0b0c">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23161617'/%3E%3Crect x='7' y='9' width='9' height='3' rx='1.5' fill='%23ececec'/%3E%3Crect x='7' y='15' width='7' height='3' rx='1.5' fill='%23ececec'/%3E%3Crect x='18' y='15' width='7' height='3' rx='1.5' fill='%23ff7a50'/%3E%3C/svg%3E">
-  <link rel="preload" href="fonts/Caveat.woff2" as="font" type="font/woff2" crossorigin>
+  <meta name="description" content="Prototyp eines Schreibinterfaces: Ein Notizbuch, in dem eine KI bei jedem Enter einen Gedanken danebenschreibt.">
+  <meta name="theme-color" content="#0b0a09">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231d2b27'/%3E%3Crect x='6' y='7' width='20' height='18' rx='2' fill='%23e8d9b2'/%3E%3Crect x='15' y='7' width='2' height='18' fill='%23b9a574'/%3E%3C/svg%3E">
+  <link rel="preload" href="fonts/KleeOne-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <main class="stage">
-    <div class="deck" id="deck"></div>
+    <div class="book" id="book">
+      <div class="book__cover"></div>
+      <div class="book__pages">
+        <div class="paper paper--l pg"></div>
+        <div class="paper paper--r pg"></div>
+      </div>
+      <div class="book__spreads" id="spreads"></div>
+      <div class="leafslot" id="leafslot"></div>
+      <button class="corner corner--prev" id="prev" type="button" aria-label="Zurückblättern"></button>
+      <button class="corner corner--next" id="next" type="button" aria-label="Weiterblättern"></button>
+      <nav class="ftabs" id="tabs" aria-label="Notizen"></nav>
+      <button class="del" id="del" type="button">Notiz entfernen</button>
+      <div class="pen" id="pen" aria-hidden="true">
+        <svg viewBox="0 0 110 110" width="110" height="110">
+          <g transform="translate(6 104) rotate(-34) scale(.86)">
+            <path d="M0 0 L17 -4.2 L17 4.2 Z" fill="#2b2a2e"/>
+            <rect x="16" y="-5.2" width="13" height="10.4" rx="1.5" fill="#c9a24a"/>
+            <rect x="29" y="-6.6" width="72" height="13.2" rx="6.4" class="pen__barrel"/>
+            <rect x="34" y="-5" width="58" height="2.8" rx="1.4" fill="#fff" opacity=".14"/>
+            <rect x="96" y="-5.6" width="3" height="11.2" rx="1.2" fill="#c9a24a"/>
+          </g>
+        </svg>
+      </div>
+    </div>
   </main>
-  <nav class="tabs" id="tabs" aria-label="Notizen"></nav>
 
   <script src="app.js"></script>
 </body>
