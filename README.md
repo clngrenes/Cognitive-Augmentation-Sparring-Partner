@@ -1,18 +1,24 @@
 # Sparring
 
-Prototyp eines Schreibinterfaces: ein altes Notizbuch, in dem du links schreibst und rechts eine KI mitdenkt. Bei jedem Enter schreibt sie einen kurzen Nebengedanken zu dem, was du gerade geschrieben hast, mit demselben Stift in derselben Handschrift. Sie schreibt nie in deinen Text.
+Prototyp eines Schreibinterfaces: ein altes Notizbuch, in dem du links schreibst und rechts eine KI mitdenkt. Bei jedem Enter schreibt sie einen kurzen Nebengedanken zu dem, was du gerade geschrieben hast, in derselben Handschrift. Sie schreibt nie in deinen Text.
 
 Reines HTML, CSS und JavaScript plus eine Vercel-Funktion (`api/think.js`) für die KI.
 
 ## Bedienung
 
-- Enter beendet einen Block, die KI antwortet rechts. Ein Füller schreibt mit.
-- Ist die Seite voll, wird automatisch umgeblättert.
-- Blättern: auf die aufgerollten Ecken unten klicken, mit `Bild auf` und `Bild ab`, oder auf dem Handy wischen.
-- Jede Notiz hat einen farbigen Klebereiter am rechten Rand. Ein Klick darauf blättert zu dieser Notiz, `+` legt eine neue an.
+- Enter beendet einen Block, die KI schreibt rechts einen Gedanken dazu, Wort für Wort.
+- Rechts ist der Cursor ein Textmarker: Eine Stelle im Gedanken der KI mit gedrückter Maustaste anstreichen, und darunter öffnet sich ein Block für deinen Kommentar zu genau dieser Stelle. Die KI sieht die Stelle und geht darauf ein. Ein Klick auf den Gedanken antwortet ohne Stelle. Erneut anstreichen nimmt die Markierung zurück.
+- Zwischen zwei Gedanken bleibt eine freie Zeile, dazu ein kleiner Tintenpunkt am Anfang. Keine Trennlinie, denn die gibt es im Notizbuch nicht.
+- Blättern: auf die aufgerollten Ecken unten klicken, mit `Bild auf` und `Bild ab`, auf einen Reiter klicken oder auf dem Handy wischen. Das Blatt biegt sich dabei wie Papier.
+- Jede Notiz hat einen Klebereiter am Buchrand. Notizen vor der aufgeschlagenen Stelle hängen links, die danach rechts. Der cremefarbene Reiter „neu“ legt eine neue Notiz an.
 - `# ` macht einen Titel, `- ` eine Liste.
-- Ein Klick auf einen Gedanken der KI öffnet einen Block für deine Antwort. Beim Darüberfahren leuchtet die Stelle, auf die er sich bezieht, wie mit einem Textmarker auf.
 - Esc markiert einen Block (Pfeile bewegen die Auswahl, Entf löscht, Enter schreibt weiter).
+
+## Wann eine neue Seite beginnt
+
+1. Dein Text läuft Zeile für Zeile bis zur letzten Linie und setzt sich auf der nächsten Seite fort. Ein langer Absatz springt nicht als Ganzes.
+2. Der Gedanke der KI braucht Platz neben deinem Block. Reicht der Rest der Seite dafür nicht mehr, beginnt dein nächster Block oben auf der nächsten Seite. Du siehst die KI noch schreiben, die Seite wird erst umgeschlagen, wenn du weiterschreibst oder die Ecke anklickst.
+3. Rutscht ein Block samt Gedanke auf die nächste Seite, blättert das Buch mit.
 
 Notizen liegen nur im Browser (`localStorage`). Nichts wird auf einem Server gespeichert.
 

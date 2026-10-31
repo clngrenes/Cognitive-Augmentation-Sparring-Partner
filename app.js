@@ -4,8 +4,8 @@
   var book = document.getElementById('book');
   var spreadsEl = document.getElementById('spreads');
   var leafSlot = document.getElementById('leafslot');
-  var tabsEl = document.getElementById('tabs');
-  var penEl = document.getElementById('pen');
+  var tabsL = document.getElementById('tabsL');
+  var tabsR = document.getElementById('tabsR');
   var delBtn = document.getElementById('del');
   var prevBtn = document.getElementById('prev');
   var nextBtn = document.getElementById('next');
@@ -14,7 +14,7 @@
   var STORE = 'sparring.v3', OLD_STORE = 'sparring.v2';
   var TAB_COLORS = ['#c8553d', '#e0b13b', '#6f9a8d', '#5b7aa3', '#b86b87', '#8c7bb3'];
   /* docs = Notizen (jede mit eigenem Klebereiter), jede Notiz besteht aus einer oder mehreren Doppelseiten */
-  var state = { docs: [], cur: 0, selected: null, uid: 0, noteIndex: {}, saveTimer: null, single: false, lines: 0, ready: false, flip: null, tabSig: '' };
+  var state = { docs: [], cur: 0, tabCur: 0, selected: null, uid: 0, noteIndex: {}, saveTimer: null, single: false, lines: 0, L: 36, ready: false, flip: null, pending: null, queued: null };
 
   var plain = (function () {
     var d = document.createElement('div');
@@ -82,6 +82,7 @@
     if (!rr) return true;
     return dir < 0 ? rr.top - b.top < lh * 0.9 : b.bottom - rr.bottom < lh * 0.9;
   }
+  function relTop(row, sp) { return row.offsetTop - sp.sheet.offsetTop; }
 
   /* ---------- Maße: Zeilenhöhe, Zeilen pro Seite, Buchbreite ---------- */
   function metrics() {
@@ -89,7 +90,7 @@
     var single = vw < 760;
     var L = single ? 32 : Math.max(32, Math.min(38, Math.round(27 + vw * 0.0075)));
     var padTop = Math.round(L * 1.35), padBot = Math.round(L * 1.6);
-    var bookW = single ? vw - 52 : Math.min(1240, vw - 150);
+    var bookW = single ? vw - 52 : Math.min(1240, vw - 190);
     var availH = vh - (single ? 210 : 150);
     var lines = Math.max(6, Math.floor((Math.min(availH, 880) - padTop - padBot) / L));
     var s = root.style;
@@ -101,10 +102,47 @@
     s.setProperty('--book-w', bookW + 'px');
     state.single = single;
     state.lines = lines;
+    state.L = L;
     root.classList.toggle('is-single', single);
   }
 
+  /* ---------- Absätze können auf mehrere Seiten laufen ---------- */
+  function logicalRows(doc) {
+    var out = [], cur = null;
+    docRows(doc).forEach(function (r) {
+      if (r._cont && cur) { cur.rows.push(r); cur.text += text(r._blk); cur.tail = r; }
+      else { cur = { rows: [r], head: r, tail: r, text: text(r._blk) }; out.push(cur); }
+    });
+    return out;
+  }
+  function chainTextUpTo(row) {
+    var doc = docOf(row), t = '', head = null;
+    logicalRows(doc).some(function (c) {
+      var i = c.rows.indexOf(row);
+      if (i < 0) return false;
+      c.rows.slice(0, i + 1).forEach(function (r) { t += text(r._blk); });
+      head = c.head;
+      return true;
+    });
+    return { text: t, head: head };
+  }
+  function joinConts(row) {
+    var list = docRows(docOf(row)), idx = list.indexOf(row), r;
+    while ((r = list[++idx]) && r._cont) {
+      row._blk.textContent = text(row._blk) + text(r._blk);
+      r.remove();
+    }
+  }
+
   /* ---------- Speichern ---------- */
+  function noteMarks(n) {
+    var out = [], a = -1, i;
+    for (i = 0; i <= n.words.length; i++) {
+      if (n.mk[i]) { if (a < 0) a = i; }
+      else if (a >= 0) { out.push([a, i - 1]); a = -1; }
+    }
+    return out;
+  }
   function serialize() {
     var cur = curSpread(), di = 0, si = 0;
     state.docs.forEach(function (d, i) { var k = d.spreads.indexOf(cur); if (k >= 0) { di = i; si = k; } });
@@ -113,13 +151,14 @@
       docs: state.docs.map(function (d) {
         return {
           id: d.id,
-          rows: docRows(d).map(function (r) {
-            return {
-              type: r.dataset.type, text: text(r._blk), replyTo: r._replyTo ? r._replyTo.id : null,
-              notes: Array.prototype.map.call(r._ai.querySelectorAll('.note:not(.note--off)'), function (n) {
-                return { id: n._note.id, text: n._note.text, anchor: n._note.anchor };
-              })
-            };
+          rows: logicalRows(d).map(function (c) {
+            var notes = [];
+            c.rows.forEach(function (r) {
+              Array.prototype.forEach.call(r._ai.querySelectorAll('.note:not(.note--off)'), function (n) {
+                notes.push({ id: n._note.id, text: n._note.text, marks: noteMarks(n._note) });
+              });
+            });
+            return { type: c.head.dataset.type, text: c.text, replyTo: c.head._replyTo ? c.head._replyTo.id : null, quote: c.head._quote || null, notes: notes };
           })
         };
       })
@@ -131,14 +170,17 @@
   }
   function saveSoon() {
     clearTimeout(state.saveTimer);
-    state.saveTimer = setTimeout(function () { save(); renderTabs(); }, 500);
+    state.saveTimer = setTimeout(function () { save(); layoutTabs(); }, 500);
   }
   window.addEventListener('pagehide', save);
 
   /* ---------- Blöcke ---------- */
+  function replyPlaceholder(row) {
+    return row._quote ? 'Zu „' + shorten(row._quote, 38) + '“ …' : 'Deine Antwort …';
+  }
   function setType(row, type) {
     row.dataset.type = type;
-    row._blk.dataset.placeholder = row._replyTo ? 'Deine Antwort …' : PLACEHOLDER[type];
+    row._blk.dataset.placeholder = row._replyTo ? replyPlaceholder(row) : PLACEHOLDER[type];
   }
   function makeRow(type) {
     var row = el('section', 'row');
@@ -168,6 +210,7 @@
   function removeRow(row) {
     var doc = docOf(row);
     if (state.selected === row) state.selected = null;
+    if (state.pending === row) state.pending = null;
     row.remove();
     if (!docRows(doc).length) addRow(null, 'p', '', doc.spreads[0].sheet);
     paginate(doc);
@@ -187,36 +230,123 @@
     row.parentNode.focus({ preventScroll: true });
   }
 
-  /* ---------- Seiten füllen sich, dann wird umgeblättert ---------- */
-  function overflows(sp) { return sp.sheet.scrollHeight > sp.sheet.clientHeight + 1; }
+  /* ---------- Seiten füllen sich ----------
+     1. Dein Text läuft Zeile für Zeile bis zur letzten Linie und setzt sich dann auf der nächsten Seite fort.
+     2. Ein Gedanke der KI braucht Platz neben deinem Block. Reicht er nicht mehr, beginnt dein nächster Block
+        auf der nächsten Seite. Umgeblättert wird erst, wenn du weiterschreibst, damit du die KI noch schreiben siehst. */
+  var AI_LINES = 8;
+  function aiExtra(row) {
+    if (row.dataset.type === 'h1' || row._ai.childNodes.length) return 0;
+    return Math.max(0, (state.single ? AI_LINES + 3 : AI_LINES) - Math.round(row.offsetHeight / state.L));
+  }
+  function usedPx(sp) {
+    var list = rowsIn(sp);
+    if (!list.length) return 0;
+    var last = list[list.length - 1];
+    var me = last.firstChild.offsetHeight;
+    var ai = last._ai.offsetHeight - (last._ai.childNodes.length ? state.L : 0);
+    return relTop(last, sp) + Math.max(me, ai);
+  }
+  function overflows(sp) { return usedPx(sp) > sp.sheet.clientHeight + 1; }
+  function freeLines(sp) { return Math.floor((sp.sheet.clientHeight - usedPx(sp) + 1) / state.L); }
   function addSpread(doc, at) {
     var sp = createSpread(doc);
     doc.spreads.splice(at == null ? doc.spreads.length : at, 0, sp);
     return sp;
   }
-  function paginate(doc) {
-    var ae = document.activeElement, focusRow = null, off = 0;
-    if (ae && ae.classList && ae.classList.contains('blk')) { focusRow = ae.closest('.row'); off = caretOffset(ae); }
-    var moved = false, i, sp, nx, list, keep = curSpread();
-    for (i = 0; i < doc.spreads.length; i++) {
-      sp = doc.spreads[i];
-      list = rowsIn(sp);
-      while (list.length > 1 && overflows(sp)) {
-        var last = list.pop();
-        nx = doc.spreads[i + 1] || addSpread(doc);
-        nx.sheet.insertBefore(last, nx.sheet.firstChild);
-        moved = true;
-      }
+  function rangeAt(blk, i) {
+    var w = document.createTreeWalker(blk, NodeFilter.SHOW_TEXT), n, pos = 0, r = document.createRange();
+    while ((n = w.nextNode())) {
+      var len = n.nodeValue.length;
+      if (i < pos + len) { r.setStart(n, i - pos); r.setEnd(n, i - pos + 1); return r; }
+      pos += len;
     }
-    for (i = 0; i < doc.spreads.length - 1; i++) {
-      sp = doc.spreads[i]; nx = doc.spreads[i + 1];
-      for (;;) {
-        var first = rowsIn(nx)[0];
-        if (!first || first === focusRow) break;
-        sp.sheet.appendChild(first);
-        if (overflows(sp)) { nx.sheet.insertBefore(first, nx.sheet.firstChild); break; }
-        moved = true;
+    return null;
+  }
+  function lineOfChar(blk, i, top) {
+    var r = rangeAt(blk, i);
+    if (!r) return 1e9;
+    var rects = r.getClientRects(), t = rects.length ? rects[0].top : r.getBoundingClientRect().top;
+    return Math.floor((t - top + 2) / state.L);
+  }
+  function canSplit(row) {
+    return (row.dataset.type === 'p' || row.dataset.type === 'li') && text(row._blk).length > 1;
+  }
+  /* Die Gedanken der KI gehören ans Ende des Absatzes */
+  function adoptNotes(to, from) {
+    while (from._ai.firstChild) {
+      var c = from._ai.firstChild;
+      if (c._note) c._note.row = to;
+      to._ai.appendChild(c);
+    }
+  }
+  /* Trennt den Absatz an der letzten Zeile, die noch auf die Seite passt */
+  function splitRow(row, sp, ctx) {
+    var avail = Math.floor((sp.sheet.clientHeight - relTop(row, sp) + 1) / state.L);
+    if (avail < 1) return null;
+    var blk = row._blk, t = text(blk), top = blk.getBoundingClientRect().top;
+    if (lineOfChar(blk, t.length - 1, top) < avail) return null;
+    var lo = 0, hi = t.length - 1;
+    while (lo < hi) {
+      var mid = (lo + hi) >> 1;
+      if (lineOfChar(blk, mid, top) >= avail) hi = mid; else lo = mid + 1;
+    }
+    var cut = lo;
+    if (cut <= 0 || cut >= t.length) return null;
+    var r2 = makeRow(row.dataset.type === 'li' ? 'li' : 'p');
+    r2._cont = true;
+    r2.dataset.cont = '1';
+    blk.textContent = t.slice(0, cut);
+    r2._blk.textContent = t.slice(cut);
+    row.after(r2);
+    adoptNotes(r2, row);
+    if (ctx.row === row && ctx.off >= cut) { ctx.row = r2; ctx.off -= cut; }
+    return r2;
+  }
+  function paginate(doc) {
+    var ae = document.activeElement, ctx = { row: null, off: 0 }, keep = curSpread();
+    if (ae && ae.classList && ae.classList.contains('blk')) {
+      var fr = ae.closest('.row');
+      if (fr && docOf(fr) === doc) { ctx.row = fr; ctx.off = caretOffset(ae); }
+    }
+    var moved = false, i, sp, nx, list, pass;
+    for (pass = 0; pass < 40; pass++) {
+      var changed = false;
+      /* zu voll: Absatz teilen oder Block auf die nächste Seite schieben */
+      for (i = 0; i < doc.spreads.length; i++) {
+        sp = doc.spreads[i];
+        while (overflows(sp)) {
+          list = rowsIn(sp);
+          var last = list[list.length - 1], r2 = canSplit(last) ? splitRow(last, sp, ctx) : null;
+          nx = doc.spreads[i + 1] || addSpread(doc);
+          if (r2) { nx.sheet.insertBefore(r2, nx.sheet.firstChild); changed = moved = true; continue; }
+          if (list.length > 1) { nx.sheet.insertBefore(last, nx.sheet.firstChild); changed = moved = true; continue; }
+          break;
+        }
       }
+      /* Platz frei: Fortsetzung zurückholen oder nachrückende Blöcke hochziehen */
+      for (i = 0; i < doc.spreads.length - 1; i++) {
+        sp = doc.spreads[i]; nx = doc.spreads[i + 1];
+        var first = rowsIn(nx)[0], prevRow = rowsIn(sp).pop();
+        if (!first || first === ctx.row) continue;
+        if (first._cont && prevRow) {
+          if (freeLines(sp) >= 1) {
+            var pl = text(prevRow._blk).length;
+            prevRow._blk.textContent = text(prevRow._blk) + text(first._blk);
+            if (ctx.row === first) { ctx.row = prevRow; ctx.off += pl; }
+            adoptNotes(prevRow, first);
+            first.remove();
+            changed = moved = true;
+          }
+          continue;
+        }
+        first._cont = false; delete first.dataset.cont;
+        sp.sheet.appendChild(first);
+        var ok = !overflows(sp) && (first._ai.childNodes.length || freeLines(sp) >= aiExtra(first));
+        if (!ok) { nx.sheet.insertBefore(first, nx.sheet.firstChild); }
+        else changed = moved = true;
+      }
+      if (!changed) break;
     }
     for (i = doc.spreads.length - 1; i > 0; i--) {
       if (!rowsIn(doc.spreads[i]).length) removeSpread(doc, i);
@@ -225,11 +355,11 @@
     if (kept >= 0) state.cur = kept;
     if (moved) {
       state.cur = Math.min(state.cur, flat().length - 1);
-      if (focusRow && focusRow.isConnected) reveal(focusRow, off);
+      if (ctx.row && ctx.row.isConnected) reveal(ctx.row, ctx.off);
       else syncChrome();
     }
   }
-  /* Zeile sichtbar machen: wenn sie auf einer anderen Seite liegt, wird dorthin geblättert */
+  /* Zeile sichtbar machen: liegt sie auf einer anderen Seite, wird dorthin geblättert */
   function reveal(row, off) {
     var idx = flat().indexOf(spreadOf(row));
     if (idx === state.cur) { placeCaret(row._blk, off == null ? Infinity : off); syncChrome(); return; }
@@ -241,63 +371,47 @@
   }
 
   /* ---------- Gedanken der KI ---------- */
-  function bookPoint(x, y) { var b = book.getBoundingClientRect(); return { x: x - b.left, y: y - b.top }; }
-  function penTo(x, y, ai) {
-    penEl.classList.toggle('pen--ai', !!ai);
-    penEl.style.transform = 'translate(' + Math.round(x - 6) + 'px,' + Math.round(y - 104) + 'px)';
-    penEl.classList.add('is-on');
-    clearTimeout(penTo.t);
-    penTo.t = setTimeout(penOff, ai ? 1700 : 2300);
-  }
-  function penOff() { penEl.classList.remove('is-on', 'is-writing'); }
-  function penAtCaret() {
-    if (reduced || state.flip) return;
-    var sel = window.getSelection();
-    if (!sel.rangeCount || !sel.isCollapsed) return;
-    var node = sel.anchorNode, host = node && (node.nodeType === 1 ? node : node.parentNode);
-    var blk = host && host.closest && host.closest('.blk');
-    if (!blk) return;
-    var r = sel.getRangeAt(0).cloneRange(); r.collapse(true);
-    var rc = r.getClientRects()[0], br = blk.getBoundingClientRect(), x, y;
-    if (rc && (rc.width || rc.height)) { x = rc.left; y = rc.bottom - 6; }
-    else { x = br.left; y = br.top + parseFloat(getComputedStyle(blk).lineHeight) - 6; }
-    var p = bookPoint(x, y);
-    penTo(p.x, p.y, false);
-  }
-  function penWord(s) {
-    if (reduced || state.flip || !s.isConnected) return;
-    var sp = s.closest('.spread');
-    if (!sp || !sp.classList.contains('is-current')) return;
-    var rs = s.getClientRects();
-    var rc = rs[rs.length - 1];
-    if (!rc) return;
-    var p = bookPoint(rc.right, rc.bottom - 6);
-    penTo(p.x, p.y, true);
-    penEl.classList.add('is-writing');
-  }
-
-  function revealWords(p, txt) {
+  function buildWords(p, txt, instant) {
     var words = txt.split(' ');
     p.textContent = '';
-    words.forEach(function (w, i) { p.appendChild(el('span', 'w', w + (i < words.length - 1 ? ' ' : ''))); });
+    words.forEach(function (w, i) {
+      var s = el('span', 'w' + (instant ? ' on' : ''), w + (i < words.length - 1 ? ' ' : ''));
+      p.appendChild(s);
+    });
     p.setAttribute('aria-label', txt);
+    return words;
+  }
+  function applyMarks(n) {
+    Array.prototype.forEach.call(n.el.querySelectorAll('.w'), function (s, i) { s.classList.toggle('mk', !!n.mk[i]); });
+  }
+  function revealWords(p) {
     var spans = p.querySelectorAll('.w');
     Array.prototype.forEach.call(spans, function (s, i) {
       if (reduced) s.classList.add('on');
-      else setTimeout(function () { s.classList.add('on'); penWord(s); }, 60 + i * 115);
+      else setTimeout(function () { s.classList.add('on'); }, 60 + i * 115);
     });
   }
-  function renderNote(row, txt, anchor, instant, id) {
+  /* Passt der neue Gedanke nicht mehr auf die Seite und rutscht mit seinem Block weiter, blättert das Buch mit,
+     damit man die KI noch schreiben sieht (nur wenn man gerade nicht mitten im Text ist) */
+  function followNote(row) {
+    var p = state.pending;
+    if (!p || !p.isConnected || !row.isConnected) return;
+    var sp = spreadOf(row), idx = flat().indexOf(sp);
+    if (idx !== state.cur && spreadOf(p) === sp) go(idx, {});
+  }
+  function renderNote(row, txt, instant, id, marks) {
     var art = el('p', 'note');
     art.tabIndex = 0;
     art.setAttribute('role', 'button');
-    art.title = 'Klicken, um zu antworten';
-    var n = { id: id || newId(), row: row, text: txt, anchor: anchor || null, el: art };
+    art.title = 'Anklicken zum Antworten, mit gedrückter Maustaste Stellen markieren';
+    var n = { id: id || newId(), row: row, text: txt, el: art, mk: [], replyRows: [] };
+    n.words = buildWords(art, txt, instant);
+    (marks || []).forEach(function (m) { for (var i = m[0]; i <= m[1]; i++) n.mk[i] = true; });
+    applyMarks(n);
     art._note = n;
     state.noteIndex[n.id] = n;
-    if (instant) { art.textContent = txt; } else revealWords(art, txt);
     row._ai.appendChild(art);
-    if (!instant) paginate(docOf(row));
+    if (!instant) { revealWords(art); paginate(docOf(row)); followNote(row); }
     saveSoon();
     return n;
   }
@@ -314,12 +428,18 @@
       var last = msgs[msgs.length - 1];
       if (last && last.role === role) last.text += '\n' + t; else msgs.push({ role: role, text: t });
     }
-    var list = docRows(docOf(upTo));
+    var list = logicalRows(docOf(upTo));
     for (var i = 0; i < list.length; i++) {
-      var r = list[i], t = text(r._blk).trim();
-      if (t) push('user', r.dataset.type === 'h1' ? 'Titel: ' + t : t);
-      if (r === upTo) break;
-      r._ai.querySelectorAll('.note:not(.note--off)').forEach(function (n) { push('model', n._note.text); });
+      var c = list[i], t = c.text.trim(), isLast = c.rows.indexOf(upTo) >= 0;
+      if (t) {
+        var line = c.head.dataset.type === 'h1' ? 'Titel: ' + t : t;
+        if (c.head._quote) line = '[Bezieht sich auf deine Stelle: „' + c.head._quote + '“]\n' + line;
+        push('user', line);
+      }
+      if (isLast) break;
+      c.rows.forEach(function (r) {
+        r._ai.querySelectorAll('.note:not(.note--off)').forEach(function (n) { push('model', n._note.text); });
+      });
     }
     var total = 0;
     msgs = msgs.slice(-24).map(function (m) { return { role: m.role, text: m.text.slice(0, 1500) }; });
@@ -351,33 +471,98 @@
     });
   }
   function requestThought(row) {
-    var txt = text(row._blk).trim();
-    if (row.dataset.type === 'h1' || !txt) return;
+    var chain = chainTextUpTo(row), txt = chain.text.trim();
+    if (!chain.head || chain.head.dataset.type === 'h1' || !txt) return;
     fetchThought(buildMessages(row))
-      .then(function (t) { if (row.isConnected) renderNote(row, clean(t), txt, false); })
+      .then(function (t) { if (row.isConnected) renderNote(row, clean(t), false); })
       .catch(function () { if (row.isConnected) renderOffline(row); });
   }
-  function openReply(note) {
-    if (note.replyRow && note.replyRow.isConnected) { reveal(note.replyRow); return; }
+
+  /* Antwort auf einen Gedanken, optional zu einer markierten Stelle */
+  function openReply(note, quote) {
+    var existing = note.replyRows.filter(function (r) { return r.isConnected && (r._quote || null) === (quote || null); })[0];
+    if (existing) { reveal(existing); return; }
     var r = makeRow('p');
     r._replyTo = note;
-    r._blk.dataset.placeholder = 'Deine Antwort …';
-    note.row.after(r);
-    note.replyRow = r;
+    r._quote = quote || null;
+    r._blk.dataset.placeholder = replyPlaceholder(r);
+    var after = note.row;
+    note.replyRows = note.replyRows.filter(function (x) { return x.isConnected; });
+    note.replyRows.forEach(function (x) { if (x.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_PRECEDING) after = x; });
+    var nn = after.nextElementSibling;
+    while (nn && nn._replyTo === note) { after = nn; nn = nn.nextElementSibling; }
+    after.after(r);
+    note.replyRows.push(r);
     placeCaret(r._blk, 0);
     paginate(docOf(note.row));
+    saveSoon();
+  }
+
+  /* Mit dem Marker eine Stelle im Gedanken der KI anstreichen */
+  function wordSpans(n) {
+    var pos = 0;
+    return n.words.map(function (w) { var s = { a: pos, b: pos + w.length }; pos += w.length + 1; return s; });
+  }
+  function markSelection() {
+    var sel = window.getSelection();
+    if (!sel.rangeCount || sel.isCollapsed) return false;
+    var range = sel.getRangeAt(0), host = range.commonAncestorContainer;
+    host = host.nodeType === 1 ? host : host.parentNode;
+    var noteEl = host && host.closest && host.closest('.note');
+    if (!noteEl || !noteEl._note) return false;
+    var n = noteEl._note, pre = document.createRange();
+    pre.selectNodeContents(noteEl);
+    pre.setEnd(range.startContainer, range.startOffset);
+    var s = pre.toString().length;
+    pre.setEnd(range.endContainer, range.endOffset);
+    var e = pre.toString().length;
+    var sp = wordSpans(n), a = -1, b = -1;
+    sp.forEach(function (w, i) { if (s < w.b && e > w.a) { if (a < 0) a = i; b = i; } });
+    sel.removeAllRanges();
+    if (a < 0) return true;
+    var allOn = true, i;
+    for (i = a; i <= b; i++) if (!n.mk[i]) allOn = false;
+    for (i = a; i <= b; i++) n.mk[i] = !allOn;
+    applyMarks(n);
+    save();
+    if (!allOn) openReply(n, n.words.slice(a, b + 1).join(' '));
+    return true;
+  }
+  function runAround(n, i) {
+    var a = i, b = i;
+    while (a > 0 && n.mk[a - 1]) a--;
+    while (b < n.words.length - 1 && n.mk[b + 1]) b++;
+    return n.words.slice(a, b + 1).join(' ');
   }
 
   /* ---------- Schreiben ---------- */
   function enter(row) {
-    var full = text(row._blk), off = caretOffset(row._blk);
+    joinConts(row);
+    var full = text(row._blk), off = Math.min(caretOffset(row._blk), full.length);
     if (row.dataset.type === 'li' && !full.trim()) { setType(row, 'p'); return; }
     var before = full.slice(0, off), after = full.slice(off);
     row._blk.textContent = before;
     var nr = addRow(row, row.dataset.type === 'li' ? 'li' : 'p', after, row.parentNode);
     requestThought(row);
-    placeCaret(nr._blk, 0);
-    paginate(docOf(row));
+    var sp = spreadOf(row);
+    var free = state.lines - Math.round((relTop(row, sp) + row.offsetHeight) / state.L);
+    var need = aiExtra(row) + 1;
+    var doc = docOf(row), idx = doc.spreads.indexOf(sp);
+    if (!after && free < need && state.ready) {
+      /* kein Platz mehr für den Gedanken der KI: der nächste Block liegt schon auf der folgenden Seite */
+      var nx = doc.spreads[idx + 1] || addSpread(doc);
+      var tail = [], t0 = nr;
+      while (t0) { tail.push(t0); t0 = t0.nextElementSibling; }
+      var ref = nx.sheet.firstChild;
+      tail.forEach(function (r) { nx.sheet.insertBefore(r, ref); });
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      state.pending = nr;
+      syncChrome();
+      paginate(doc);
+    } else {
+      placeCaret(nr._blk, 0);
+      paginate(doc);
+    }
     saveSoon();
     return nr;
   }
@@ -394,13 +579,12 @@
     reveal(prev, prevText.length);
   }
 
-  var writingTimer = null;
   book.addEventListener('input', function (e) {
     var blk = e.target.closest && e.target.closest('.blk');
     if (!blk) return;
     var row = blk.closest('.row');
     if (blk.textContent === '') blk.innerHTML = '';
-    if (row.dataset.type === 'p') {
+    if (row.dataset.type === 'p' && !row._cont) {
       var m = /^(#|-|\*) /.exec(text(blk));
       if (m) {
         var rest = text(blk).slice(m[0].length);
@@ -410,12 +594,22 @@
       }
     }
     paginate(docOf(row));
-    penAtCaret();
-    penEl.classList.add('is-writing');
-    clearTimeout(writingTimer);
-    writingTimer = setTimeout(function () { penEl.classList.remove('is-writing'); }, 150);
     saveSoon();
   });
+
+  /* Wer nach einem vollen Blatt einfach weiterschreibt, schlägt dabei die Seite um */
+  document.addEventListener('keydown', function (e) {
+    var p = state.pending;
+    if (!p) return;
+    if (!p.isConnected) { state.pending = null; return; }
+    var ae = document.activeElement;
+    if (ae && ae.classList && ae.classList.contains('blk')) { state.pending = null; return; }
+    if (e.metaKey || e.ctrlKey || e.altKey || e.key.length !== 1) return;
+    e.preventDefault();
+    state.pending = null;
+    go(flat().indexOf(spreadOf(p)), { focus: p, off: 0 });
+    try { document.execCommand('insertText', false, e.key); } catch (err) {}
+  }, true);
 
   book.addEventListener('keydown', function (e) {
     if (e.key === 'PageDown' || e.key === 'PageUp') {
@@ -488,49 +682,35 @@
   book.addEventListener('pointerdown', function (e) {
     if (e.target.closest && e.target.closest('.blk')) clearSel();
   });
-  book.addEventListener('click', function (e) {
-    var note = e.target.closest && e.target.closest('.note');
-    if (note && note._note) openReply(note._note);
-  });
-  book.addEventListener('focusout', function (e) {
-    if (e.target.closest && e.target.closest('.blk')) penOff();
+  book.addEventListener('focusin', function (e) {
+    if (e.target.closest && e.target.closest('.blk')) state.pending = null;
   });
 
-  /* Beim Berühren eines Gedankens leuchtet die Stelle wie mit Textmarker auf, auf die er sich bezieht */
-  var hasHL = !!(window.CSS && CSS.highlights && typeof Highlight !== 'undefined');
-  function anchorRange(blk, anchor) {
-    if (!anchor) return null;
-    var t = text(blk), i = t.indexOf(anchor);
-    if (i < 0) return null;
-    var e = i + anchor.length, w = document.createTreeWalker(blk, NodeFilter.SHOW_TEXT);
-    var r = document.createRange(), pos = 0, node, started = false;
-    while ((node = w.nextNode())) {
-      var len = node.nodeValue.length;
-      if (!started && i < pos + len) { r.setStart(node, i - pos); started = true; }
-      if (started && e <= pos + len) { r.setEnd(node, e - pos); return r; }
-      pos += len;
+  /* Rechts ist der Cursor ein Textmarker */
+  book.addEventListener('mousemove', function (e) {
+    if (state.single) return;
+    var r = book.getBoundingClientRect();
+    book.classList.toggle('on-right', e.clientX - r.left > r.width / 2);
+  });
+  book.addEventListener('mouseleave', function () { book.classList.remove('on-right'); });
+  var justMarked = false;
+  book.addEventListener('mouseup', function (e) {
+    if (e.target.closest && e.target.closest('.note') && markSelection()) {
+      justMarked = true;
+      setTimeout(function () { justMarked = false; }, 80);
     }
-    return null;
-  }
-  function highlight(n) {
-    if (!n || !n.anchor) return;
-    if (hasHL) {
-      var r = anchorRange(n.row._blk, n.anchor);
-      if (r) CSS.highlights.set('anchor', new Highlight(r));
-    } else n.row._blk.classList.add('is-linked');
-  }
-  function clearHL() {
-    if (hasHL) CSS.highlights.delete('anchor');
-    book.querySelectorAll('.is-linked').forEach(function (x) { x.classList.remove('is-linked'); });
-  }
-  ['pointerover', 'focusin'].forEach(function (ev) {
-    book.addEventListener(ev, function (e) { var a = e.target.closest && e.target.closest('.note'); if (a && a._note) highlight(a._note); });
   });
-  ['pointerout', 'focusout'].forEach(function (ev) {
-    book.addEventListener(ev, function (e) { if (e.target.closest && e.target.closest('.note')) clearHL(); });
+  book.addEventListener('click', function (e) {
+    if (justMarked) return;
+    var noteEl = e.target.closest && e.target.closest('.note');
+    if (!noteEl || !noteEl._note) return;
+    var n = noteEl._note, w = e.target.closest('.w');
+    var quote = null;
+    if (w && w.classList.contains('mk')) quote = runAround(n, Array.prototype.indexOf.call(noteEl.children, w));
+    openReply(n, quote);
   });
 
-  /* ---------- Doppelseiten und Blättern ---------- */
+  /* ---------- Doppelseiten ---------- */
   function createSpread(doc) {
     var el0 = el('div', 'spread');
     var sheet = el('div', 'sheet');
@@ -549,7 +729,7 @@
     sp.el.remove();
   }
   function createDoc(id) {
-    var doc = { id: id || newId(), spreads: [] };
+    var doc = { id: id || newId(), spreads: [], tab: null };
     addSpread(doc);
     state.docs.push(doc);
     return doc;
@@ -558,15 +738,16 @@
     var pending = [];
     data.forEach(function (d) {
       var row = addRow(null, d.type || 'p', d.text || '', doc.spreads[0].sheet);
-      (d.notes || []).forEach(function (n) { renderNote(row, n.text, n.anchor || (d.type === 'p' ? d.text : null), true, n.id); });
-      if (d.replyTo) pending.push({ row: row, id: d.replyTo });
+      (d.notes || []).forEach(function (n) { renderNote(row, n.text, true, n.id, n.marks); });
+      if (d.replyTo) pending.push({ row: row, id: d.replyTo, quote: d.quote });
     });
     pending.forEach(function (x) {
       var parent = state.noteIndex[x.id];
       if (!parent) return;
       x.row._replyTo = parent;
-      parent.replyRow = x.row;
-      x.row._blk.dataset.placeholder = 'Deine Antwort …';
+      x.row._quote = x.quote || null;
+      parent.replyRows.push(x.row);
+      x.row._blk.dataset.placeholder = replyPlaceholder(x.row);
     });
     if (!docRows(doc).length) addRow(null, 'p', '', doc.spreads[0].sheet);
   }
@@ -577,8 +758,7 @@
     list.forEach(function (s, i) {
       var c = i === state.cur;
       s.nl.textContent = String(i * 2 + 1);
-      s.nr.textContent = String(i * 2 + 2);
-      if (state.single) s.nr.textContent = String(i + 1);
+      s.nr.textContent = state.single ? String(i + 1) : String(i * 2 + 2);
       if (!state.flip) {
         s.el.classList.toggle('is-current', c);
         s.el.inert = !c;
@@ -587,47 +767,72 @@
     });
     prevBtn.hidden = state.cur <= 0;
     nextBtn.hidden = state.cur >= list.length - 1;
-    renderTabs();
+    nextBtn.classList.toggle('is-hint', !!(state.pending && state.pending.isConnected && flat().indexOf(spreadOf(state.pending)) > state.cur));
+    if (!state.flip) state.tabCur = state.cur;
+    layoutTabs();
   }
+
+  /* ---------- Klebereiter: sitzen an der Seite, auf der sie kleben ---------- */
   function titleOf(doc) {
-    var list = docRows(doc), i, t;
-    for (i = 0; i < list.length; i++) if (list[i].dataset.type === 'h1' && (t = text(list[i]._blk).trim())) return shorten(t);
-    for (i = 0; i < list.length; i++) if ((t = text(list[i]._blk).trim())) return shorten(t);
-    return 'Neu';
+    var list = logicalRows(doc), i, t;
+    for (i = 0; i < list.length; i++) if (list[i].head.dataset.type === 'h1' && (t = list[i].text.trim())) return shorten(t);
+    for (i = 0; i < list.length; i++) if ((t = list[i].text.trim())) return shorten(t);
+    return 'neu';
   }
-  function renderTabs() {
-    var cs = curSpread();
-    var sig = state.docs.map(function (d) { return titleOf(d) + (cs && cs.doc === d ? '*' : ''); }).join('|');
-    if (sig === state.tabSig) return;
-    state.tabSig = sig;
-    tabsEl.textContent = '';
-    state.docs.forEach(function (d, i) {
-      var b = el('button', 'ftab', titleOf(d));
-      b.type = 'button';
+  function makeTab(doc) {
+    var b = el('button', 'ftab');
+    b.type = 'button';
+    b.appendChild(el('span', 'ftab__label'));
+    b.addEventListener('click', function () { openDoc(doc); });
+    return b;
+  }
+  function layoutTabs() {
+    var docs = state.docs, n = docs.length, list = flat(), cs = list[state.tabCur];
+    var gap = 9, avail = book.clientHeight - 56;
+    var tabH = Math.max(54, Math.min(150, Math.floor((avail - gap * n) / (n + 1))));
+    docs.forEach(function (d, i) {
+      if (!d.tab) d.tab = makeTab(d);
+      var b = d.tab, lab = b.firstChild, title = titleOf(d);
+      if (lab.textContent !== title) lab.textContent = title;
+      b.title = title;
       b.style.setProperty('--c', TAB_COLORS[i % TAB_COLORS.length]);
-      b.setAttribute('aria-current', String(cs && cs.doc === d));
-      b.title = titleOf(d);
-      b.addEventListener('click', function () { openDoc(d); });
-      tabsEl.appendChild(b);
+      b.style.setProperty('--tilt', ((i % 3) - 1) * 0.55 + 'deg');
+      b.style.top = 26 + i * (tabH + gap) + 'px';
+      b.style.height = tabH + 'px';
+      b.setAttribute('aria-current', String(!!cs && cs.doc === d));
+      var side = state.single ? 'r' : (list.indexOf(d.spreads[0]) <= state.tabCur ? 'l' : 'r');
+      if (b.dataset.side !== side || !b.isConnected) {
+        var fresh = !!b.dataset.side;
+        b.dataset.side = side;
+        (side === 'l' ? tabsL : tabsR).appendChild(b);
+        if (fresh && !reduced) { b.classList.remove('is-land'); void b.offsetWidth; b.classList.add('is-land'); }
+      }
     });
-    var add = el('button', 'ftab ftab--add', '+');
-    add.type = 'button';
-    add.setAttribute('aria-label', 'Neue Notiz');
-    add.addEventListener('click', addDoc);
-    tabsEl.appendChild(add);
+    if (!state.spare) {
+      state.spare = el('button', 'ftab ftab--spare');
+      state.spare.type = 'button';
+      state.spare.appendChild(el('span', 'ftab__label', 'neu'));
+      state.spare.setAttribute('aria-label', 'Neue Notiz anlegen');
+      state.spare.addEventListener('click', addDoc);
+      tabsR.appendChild(state.spare);
+    }
+    state.spare.style.top = 26 + n * (tabH + gap) + 'px';
+    state.spare.style.height = tabH + 'px';
+    Array.prototype.forEach.call(book.querySelectorAll('.ftab'), function (b) {
+      if (b !== state.spare && !state.docs.some(function (d) { return d.tab === b; })) b.remove();
+    });
   }
   function openDoc(d) {
     var cs = curSpread();
     if (cs && cs.doc === d) return;
-    var idx = flat().indexOf(d.spreads[0]), last = d.spreads.length === 1;
-    var rl = rowsIn(d.spreads[0]);
-    go(idx, last && rl.length ? { focus: rl[rl.length - 1] } : {});
+    var idx = flat().indexOf(d.spreads[0]), rl = rowsIn(d.spreads[0]);
+    go(idx, d.spreads.length === 1 && rl.length ? { focus: rl[rl.length - 1] } : {});
   }
   function flipBy(dir) {
     var idx = state.cur + dir, list = flat();
     if (idx < 0 || idx >= list.length) return;
-    var rl = rowsIn(list[idx]);
-    go(idx, rl.length ? { focus: dir > 0 ? rl[0] : rl[rl.length - 1], off: dir > 0 ? 0 : Infinity } : {});
+    var rl = rowsIn(list[idx]), pend = state.pending && state.pending.isConnected && dir > 0 && rl.indexOf(state.pending) >= 0;
+    go(idx, rl.length ? { focus: pend ? state.pending : (dir > 0 ? rl[0] : rl[rl.length - 1]), off: dir > 0 ? 0 : Infinity } : {});
   }
   prevBtn.addEventListener('click', function () { flipBy(-1); });
   nextBtn.addEventListener('click', function () { flipBy(1); });
@@ -644,13 +849,15 @@
     }, { passive: true });
   })();
 
-  /* Seite umschlagen: oben liegt ein Blatt aus Papier (aus Abzügen der beiden Seiten), das sich um den Falz dreht */
+  /* ---------- Seite umschlagen ----------
+     Das Blatt besteht aus schmalen Streifen, die sich ineinander um den Falz drehen. So biegt es sich wie echtes Papier:
+     erst hinkt der freie Rand hinterher, dann schwingt er über. Vorderseite und Rückseite zeigen Abzüge der echten Seiten. */
   function cloneSpread(sp) {
     var c = sp.el.cloneNode(true);
     c.classList.remove('is-current');
+    c.classList.add('is-clone');
     c.removeAttribute('inert'); c.inert = true;
     c.setAttribute('aria-hidden', 'true');
-    c.style.cssText = 'visibility:visible;position:absolute;top:0;right:auto;bottom:auto;inset:auto;';
     Array.prototype.forEach.call(c.querySelectorAll('[contenteditable]'), function (n) { n.removeAttribute('contenteditable'); });
     Array.prototype.forEach.call(c.querySelectorAll('[tabindex]'), function (n) { n.removeAttribute('tabindex'); });
     return c;
@@ -658,33 +865,47 @@
   function finishFlip() {
     var f = state.flip;
     if (!f) return;
-    state.flip = null;
-    try { f.anim.cancel(); } catch (e) {}
-    f.cleanup();
+    f.end();
   }
+  function ease(x) { return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; }
+  function smooth(x) { return 0.5 - 0.5 * Math.cos(Math.PI * x); }
+
   /* A kommt im Buch vor B. reverse = zurückblättern */
   function playTurn(A, B, reverse, to) {
     var W = book.clientWidth, H = book.clientHeight, single = state.single, half = single ? W : W / 2;
+    var N = single ? 7 : 14, sw = half / N;
     var leaf = el('div', 'leaf');
     leaf.style.width = half + 'px';
     leaf.style.left = (single ? 0 : W - half) + 'px';
-
-    var front = el('div', 'leaf__face leaf__face--front paper paper--r');
-    var fc = cloneSpread(A);
-    fc.style.width = W + 'px'; fc.style.height = H + 'px'; fc.style.left = single ? '0' : -(W - half) + 'px';
-    var fs = el('div', 'leaf__shade');
-    front.append(fc, fs);
-    leaf.append(front);
-
-    var bs = null;
-    if (!single) {
-      var back = el('div', 'leaf__face leaf__face--back paper paper--l');
-      var bc = cloneSpread(B);
-      bc.style.width = W + 'px'; bc.style.height = H + 'px'; bc.style.left = '0';
-      bs = el('div', 'leaf__shade');
-      back.append(bc, bs);
-      leaf.append(back);
+    var strips = [], parent = leaf, k;
+    for (k = 0; k < N; k++) {
+      var st = el('div', 'strip');
+      st.style.width = (sw + (k < N - 1 ? 0.7 : 0)) + 'px';
+      if (k > 0) st.style.left = sw + 'px';
+      var front = el('div', 'face face--front'), fp = el('div', 'paper paper--r');
+      fp.style.cssText = 'position:absolute;top:0;height:100%;width:' + half + 'px;left:' + (-k * sw) + 'px';
+      var fc = cloneSpread(A);
+      fc.style.cssText = 'position:absolute;top:0;width:' + W + 'px;height:' + H + 'px;left:' + (single ? -k * sw : -(W - half) - k * sw) + 'px';
+      var fs = el('div', 'shade');
+      front.append(fp, fc, fs);
+      st.appendChild(front);
+      var back = null, bs = null;
+      if (!single) {
+        back = el('div', 'face face--back');
+        var bp = el('div', 'paper paper--l');
+        bp.style.cssText = 'position:absolute;top:0;height:100%;width:' + half + 'px;left:' + (-(half - (k + 1) * sw)) + 'px';
+        var bc = cloneSpread(B);
+        bc.style.cssText = 'position:absolute;top:0;width:' + W + 'px;height:' + H + 'px;left:' + (-(W / 2 - (k + 1) * sw)) + 'px';
+        bs = el('div', 'shade');
+        back.append(bp, bc, bs);
+        st.appendChild(back);
+      }
+      parent.appendChild(st);
+      strips.push({ el: st, front: front, back: back, fs: fs, bs: bs });
+      parent = st;
     }
+    var cast = el('div', 'cast');
+    leafSlot.appendChild(cast);
     leafSlot.appendChild(leaf);
 
     if (single) { B.el.style.visibility = 'visible'; }
@@ -695,24 +916,57 @@
     to.el.inert = false;
     to.el.setAttribute('aria-hidden', 'false');
     book.classList.add('is-turning');
-    penOff();
 
-    var opts = { duration: single ? 620 : 1000, easing: 'cubic-bezier(0.45, 0.05, 0.55, 0.95)', fill: 'both', direction: reverse ? 'reverse' : 'normal' };
-    var anim = leaf.animate(single
-      ? [{ transform: 'rotateY(0deg)', opacity: 1 }, { transform: 'rotateY(-100deg)', opacity: 0 }]
-      : [{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(-180deg)' }], opts);
-    fs.animate([{ opacity: 0 }, { opacity: single ? 0.5 : 0.62, offset: 0.5 }, { opacity: single ? 0.5 : 0.62 }], opts);
-    if (bs) bs.animate([{ opacity: 0.62 }, { opacity: 0.62, offset: 0.5 }, { opacity: 0 }], opts);
+    var maxAngle = single ? 98 : 180, curl = single ? 4.2 : 5.2;
+    function draw(p) {
+      var e = ease(p), theta = e * maxAngle;
+      var rel = curl * Math.sin(2 * Math.PI * e) * (single ? 0.6 : 1);
+      var abs = theta, i, S, angles = [], rotD;
+      for (i = 0; i < N; i++) {
+        if (i > 0) abs -= rel;
+        angles.push(abs);
+      }
+      angles.push(abs - rel);
+      for (i = 0; i < N; i++) {
+        S = strips[i];
+        rotD = i === 0 ? theta : -rel;
+        S.el.style.transform = 'rotateY(' + (-rotD) + 'deg)';
+        var a0 = Math.max(0, Math.min(180, angles[i])), a1 = Math.max(0, Math.min(180, angles[i + 1]));
+        var s0 = 0.46 * Math.sin(a0 * Math.PI / 180), s1 = 0.46 * Math.sin(a1 * Math.PI / 180);
+        var bg = 'linear-gradient(90deg,rgba(28,16,4,' + s0.toFixed(3) + '),rgba(28,16,4,' + s1.toFixed(3) + '))';
+        var mid = (a0 + a1) / 2, showFront = mid <= 90;
+        S.front.style.visibility = (showFront && !(single && mid > 90)) ? 'visible' : 'hidden';
+        S.fs.style.background = bg;
+        if (S.back) { S.back.style.visibility = showFront ? 'hidden' : 'visible'; S.bs.style.background = 'linear-gradient(270deg,rgba(28,16,4,' + s0.toFixed(3) + '),rgba(28,16,4,' + s1.toFixed(3) + '))'; }
+      }
+      cast.style.opacity = (0.8 * Math.sin(Math.PI * e)).toFixed(3);
+    }
 
-    function cleanup() {
-      leaf.remove();
+    var T = single ? 700 : 1150, prog = reverse ? 1 : 0, last = null, raf = 0, speed = 1, tabsDone = false, dir = reverse ? -1 : 1;
+    draw(prog);
+    function tick(now) {
+      if (last == null) last = now;
+      var dt = now - last; last = now;
+      prog += dir * (dt / T) * speed;
+      if (!tabsDone && ((dir > 0 && prog >= 0.5) || (dir < 0 && prog <= 0.5))) { tabsDone = true; state.tabCur = state.cur; layoutTabs(); }
+      if ((dir > 0 && prog >= 1) || (dir < 0 && prog <= 0)) { end(); return; }
+      draw(prog);
+      raf = requestAnimationFrame(tick);
+    }
+    function end() {
+      cancelAnimationFrame(raf);
+      state.flip = null;
+      leaf.remove(); cast.remove();
       [A, B].forEach(function (s) { s.el.style.visibility = ''; s.el.style.clipPath = ''; });
       book.classList.remove('is-turning');
       syncChrome();
       save();
+      var q = state.queued;
+      state.queued = null;
+      if (q) go(q.idx, q.opts);
     }
-    state.flip = { anim: anim, cleanup: cleanup };
-    anim.onfinish = function () { if (state.flip && state.flip.anim === anim) { state.flip = null; cleanup(); } };
+    state.flip = { end: end, speedUp: function () { speed = 3.2; } };
+    raf = requestAnimationFrame(tick);
   }
 
   function go(idx, opts) {
@@ -723,12 +977,18 @@
       if (opts.select) { selectRow(opts.select); return; }
       if (opts.focus && opts.focus.isConnected) placeCaret(opts.focus._blk, opts.off == null ? Infinity : opts.off);
     }
-    if (idx === state.cur) { if (!state.flip) syncChrome(); arrive(); return; }
-    finishFlip();
+    if (state.flip) {
+      /* es wird gerade geblättert: das laufende Blatt schneller zu Ende führen, dann weiter */
+      state.flip.speedUp();
+      state.queued = { idx: idx, opts: opts };
+      return;
+    }
+    if (idx === state.cur) { syncChrome(); arrive(); return; }
     var from = list[state.cur], to = list[idx], forward = idx > state.cur;
     clearSel();
     if (document.activeElement && document.activeElement.blur && !opts.focus) document.activeElement.blur();
     state.cur = idx;
+    if (opts.focus === state.pending) state.pending = null;
     if (reduced || !state.ready) { syncChrome(); save(); arrive(); return; }
     playTurn(forward ? from : to, forward ? to : from, !forward, to);
     syncChrome();
@@ -739,8 +999,8 @@
   function addDoc() {
     var doc = createDoc();
     fill(doc, [{ type: 'p', text: '' }]);
-    state.tabSig = '';
     go(flat().indexOf(doc.spreads[0]), { focus: rowsIn(doc.spreads[0])[0], off: 0 });
+    layoutTabs();
     save();
   }
   function handleDelete() {
@@ -754,12 +1014,13 @@
     delBtn.textContent = 'Notiz entfernen';
     var doc = curSpread().doc;
     finishFlip();
+    state.pending = null;
     if (state.docs.length === 1) {
       doc.spreads.slice(1).forEach(function (s) { s.el.remove(); });
       doc.spreads.length = 1;
       doc.spreads[0].sheet.textContent = '';
       addRow(null, 'p', '', doc.spreads[0].sheet);
-      state.cur = 0; state.tabSig = '';
+      state.cur = 0;
       syncChrome(); save();
       return;
     }
@@ -768,9 +1029,8 @@
     var targetSpread = targetDoc.spreads[0];
     state.docs.splice(di, 1);
     doc.spreads.forEach(function (s) { s.el.remove(); });
-    var newIdx = flat().indexOf(targetSpread);
-    state.cur = newIdx;
-    state.tabSig = '';
+    if (doc.tab) doc.tab.remove();
+    state.cur = flat().indexOf(targetSpread);
     syncChrome();
     save();
   }
@@ -812,7 +1072,6 @@
       var sp = d.spreads[Math.max(0, Math.min(pc.spread | 0, d.spreads.length - 1))];
       state.cur = flat().indexOf(sp);
     }
-    state.tabSig = '';
     syncChrome();
   }
   settle();
