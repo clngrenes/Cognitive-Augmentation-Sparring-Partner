@@ -17,6 +17,7 @@ const SYSTEM = [
   '- Questions are rare (at most one note in five) and never generic like "What do you mean?".',
   '- Concrete beats general: names, years, numbers, mechanisms. Cite a source, concept or case only if it is famous and you are certain of author, year and content. Never invent sources, quotes, studies or figures. If unsure, describe the mechanism without names, or answer SKIP.',
   '- Never repeat what they wrote or what you already said in this conversation. Use the whole text so far, including the title, as context.',
+  '- Add knowledge, do not give advice: no "consider ...", "you should ...", "make sure ...".',
   '- No praise, no evaluation, no summary, no greeting, no lists, no markdown, no suggestions for how to word their text.',
   '- Write in English and address the person directly only when needed.',
   'Special lines in the conversation:',
@@ -87,8 +88,8 @@ async function callGemini(key, model, contents, thinkingConfig) {
 
 /* Das stärkste Modell zuerst, bei fehlendem Zugriff oder Limit das nächste. */
 async function generate(key, contents) {
-  const primary = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite-preview';
-  const models = [primary, 'gemini-3-flash-preview', 'gemini-3.1-pro-preview', 'gemini-2.5-flash'].filter((m, i, a) => a.indexOf(m) === i);
+  const primary = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
+  const models = [primary, 'gemini-3.1-flash-lite-preview', 'gemini-3.1-pro-preview', 'gemini-2.5-flash'].filter((m, i, a) => a.indexOf(m) === i);
   let lastStatus = 0;
   for (const model of models) {
     let r = await callGemini(key, model, contents, thinkingFor(model, 0));

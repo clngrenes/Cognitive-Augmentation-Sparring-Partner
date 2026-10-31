@@ -27,7 +27,7 @@ The function `api/think.js` calls Gemini. The key is **never** in the code, only
 
 1. Vercel → Project → Settings → Environment Variables
 2. Add `GEMINI_API_KEY` with your key (Production, Preview, Development)
-3. Optionally set `GEMINI_MODEL` (default: `gemini-3.1-flash-lite-preview`, about one second per answer. Set `gemini-3.1-pro-preview` for deeper but slower notes. On missing access or rate limits the function falls back to `gemini-3-flash-preview`, `gemini-3.1-pro-preview` and `gemini-2.5-flash`)
+3. Optionally set `GEMINI_MODEL` (default: `gemini-3-flash-preview`, good notes in about a second or two. Set `gemini-3.1-pro-preview` for deeper but slower notes. On missing access or rate limits the function falls back to `gemini-3.1-flash-lite-preview`, `gemini-3.1-pro-preview` and `gemini-2.5-flash`)
 4. Redeploy so the variable takes effect
 
 Without a key the page shows "No connection to the AI". The function limits requests per IP and the input length.
