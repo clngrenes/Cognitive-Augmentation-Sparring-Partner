@@ -21,7 +21,7 @@
   --font: 'Klee One', 'Hiragino Maru Gothic ProN', 'Yu Gothic', 'Segoe Print', 'Bradley Hand', cursive;
   --L: 36px;
   --fs: 22px;
-  --roll: 46px;
+  --roll: 40px;
   --padtop: calc(var(--roll) + var(--L));
   --pad-out: 3.2rem;
   --pad-in: 2.4rem;
@@ -95,7 +95,7 @@ button { font: inherit; color: inherit; }
 
 /* Walze oben: gerendertes 3D-Bild (Stab, Knäufe, aufgewickeltes Papier); die Farbe der Rolle sitzt als Bänder darauf */
 .roller {
-  position: absolute; left: -36px; right: -36px; top: -12px; height: var(--roll); z-index: 6; pointer-events: none; display: flex;
+  position: absolute; left: -43px; right: -43px; top: -10px; height: var(--roll); z-index: 6; pointer-events: none; display: flex;
   filter: drop-shadow(0 9px 8px rgba(0, 0, 0, 0.6));
 }
 .roller__l, .roller__r { flex: none; width: 45px; height: 100%; position: relative; z-index: 1; background-size: 100% 100%; background-repeat: no-repeat; }
@@ -107,8 +107,8 @@ button { font: inherit; color: inherit; }
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.42) 0, rgba(255, 255, 255, 0) 30%, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.38) 100%), var(--c);
   box-shadow: 0 0 3px rgba(0, 0, 0, 0.45), inset 1px 0 0 rgba(255, 255, 255, 0.2), inset -1px 0 0 rgba(0, 0, 0, 0.25);
 }
-.band--l { left: 60px; }
-.band--r { right: 60px; }
+.band--l { left: 67px; }
+.band--r { right: 67px; }
 .scrollwrap.is-bare .roller { opacity: 0; transition: none; }
 .scrollwrap .roller { transition: opacity 0.35s; }
 .rollshade {
@@ -333,15 +333,15 @@ button { font: inherit; color: inherit; }
   .si__act { left: auto; right: 0.1rem; top: 0.3rem; margin-top: 0; width: 1.3rem; height: auto; gap: 0.25rem; }
   .si.is-current .si__act { opacity: 1; }
   .si.is-current .si__pal, .si.is-current .si__x { pointer-events: auto; }
-  .main { order: 1; flex: 1 1 auto; min-height: 0; margin: 0 1.9rem; }
+  .main { order: 1; flex: 1 1 auto; min-height: 0; margin: 0 2.1rem; }
   .binrow { order: 2; margin: 0; padding: 0; height: 4rem; }
   .bin { padding: 0.1rem 0.5rem; }
   .bin img { width: 2.9rem; }
-  .roller { left: -27px; right: -27px; height: 34px; top: -9px; }
+  .roller { left: -31px; right: -31px; height: 30px; top: -7px; }
   .roller__l, .roller__r { width: 33px; }
   .band { width: 10px; }
-  .band--l { left: 44px; }
-  .band--r { right: 44px; }
+  .band--l { left: 49px; }
+  .band--r { right: 49px; }
 }
 @media (max-width: 47.5rem) {
   :root { --pad-out: 1.5rem; --pad-in: 1.2rem; }
