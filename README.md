@@ -6,11 +6,11 @@ Plain HTML, CSS and JavaScript plus one Vercel function (`api/think.js`) that ta
 
 ## How it works
 
-- There is no send button and no need to press Enter. Write. When you pause after a sentence (or after a few seconds mid-sentence) and there is enough new text, the AI looks at it and decides itself whether it can add something valuable. If not, it stays silent (the model answers `SKIP`). Enter simply starts a new paragraph.
-- The notes are deliberately short: one sentence, at most two, no questions, no praise. A concept, a case, a consequence or the strongest counterargument.
-- The cursor on the right page is a highlighter. Drag over a passage of an AI note to mark it. A reply block opens on the left, quoting the passage, and the AI sees exactly what you refer to. Click a marked passage, or the empty right page, to take marks back (empty reply blocks disappear with them). Click a note without dragging to reply to the whole note.
+- There is no send button and no need to press Enter. Write. When you pause (about 1.5 s after a sentence, a few seconds mid-sentence) or have written two to three sentences, the AI looks at the new text and decides itself whether it can add something valuable. If not, it stays silent (the model answers `SKIP`). Enter simply starts a new paragraph.
+- The notes are deliberately short (one or two sentences) and work on *your* thinking, not on the topic: the assumption under your claim, a tension between two of your statements (also across notes), the sharpest objection to exactly what you wrote, the step you did not take. No trivia, no praise. It answers in the language you write in.
+- The cursor on the right page is a highlighter. Drag over a passage of an AI note to mark it. A new paragraph with an ink dot opens on the left, and the AI sees exactly which passage you refer to. Click a marked passage, or the empty right page, to take marks back (empty reply blocks disappear with them). Click a note without dragging to reply to the whole note.
 - Turning pages: click the curled corners, use `Page Up` and `Page Down`, click a tab, or swipe on a phone. The leaf bends like paper.
-- Every note has a sticky tab on the edge of the book. Notes before the open spread hang on the left, later ones on the right. The cream "new" tab starts a note.
+- Hover a tab and a small × appears: it asks whether you really want to delete the note, then the pages crumple and fly into the wastebasket under the book (the basket itself works too, for the open note). Every note has a sticky tab on the edge of the book. Notes before the open spread hang on the left, later ones on the right. The cream "new" tab starts a note.
 - `# ` makes a title, `- ` a list. `Esc` selects a block (arrows move, `Del` removes, `Enter` continues writing).
 
 ## When a new page starts

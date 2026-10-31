@@ -6,7 +6,9 @@
   var leafSlot = document.getElementById('leafslot');
   var tabsL = document.getElementById('tabsL');
   var tabsR = document.getElementById('tabsR');
-  var delBtn = document.getElementById('del');
+  var binBtn = document.getElementById('bin');
+  var confirmEl = document.getElementById('confirm');
+  var trashLayer = document.getElementById('trashlayer');
   var prevBtn = document.getElementById('prev');
   var nextBtn = document.getElementById('next');
   var root = document.documentElement;
@@ -178,14 +180,10 @@
   function replyPlaceholder(row) {
     return row._quote ? 'Your take on this …' : 'Your reply …';
   }
-  /* Bezug: die markierte Stelle steht klein über deiner Antwort, in der Farbe des Markers */
+  /* Antwort auf einen Gedanken: trägt wie die Gedanken rechts einen Punkt am Rand, die Stelle bleibt rechts markiert */
   function setQuote(row, quote) {
     row._quote = quote || null;
-    var body = row._blk.parentNode, ref = row._ref;
-    if (quote) {
-      if (!ref) { ref = row._ref = el('div', 'ref'); body.insertBefore(ref, row._blk); }
-      ref.textContent = quote;
-    } else if (ref) { ref.remove(); row._ref = null; }
+    row.classList.add('is-reply');
     if (row._replyTo) row._blk.dataset.placeholder = replyPlaceholder(row);
   }
   function setType(row, type) {
@@ -413,8 +411,7 @@
     var art = el('p', 'note');
     art.tabIndex = 0;
     art.setAttribute('role', 'button');
-    art.title = 'Click to reply, drag to mark a passage';
-    var n = { id: id || newId(), row: row, text: txt, el: art, mk: [], replyRows: [] };
+      var n = { id: id || newId(), row: row, text: txt, el: art, mk: [], replyRows: [] };
     n.words = buildWords(art, txt, instant);
     (marks || []).forEach(function (m) { for (var i = m[0]; i <= m[1]; i++) n.mk[i] = true; });
     applyMarks(n);
@@ -518,7 +515,8 @@
     head._seen = chain.text.length;
     doc._lastAsk = Date.now();
     doc._busy = true;
-    var msgs = buildMessages(row, seen);
+    var msgs = buildMessages(row, seen), ctx = othersContext(doc);
+    if (ctx && msgs.length && msgs[0].role === 'user') msgs[0].text = '[Other notes in this notebook]\n' + ctx + '\n\n' + msgs[0].text;
     fetchThought(msgs)
       .then(function (t) {
         doc._busy = false;
@@ -527,8 +525,22 @@
       })
       .catch(function () { doc._busy = false; if (row.isConnected) renderOffline(row); });
   }
+  function othersContext(doc) {
+    var out = [];
+    state.docs.forEach(function (d) {
+      if (d === doc) return;
+      var t = logicalRows(d).map(function (c) { return c.text.trim(); }).filter(Boolean).join(' ').replace(/\s+/g, ' ');
+      if (t) out.push('- ' + titleOf(d) + ': ' + t.slice(0, 320));
+    });
+    return out.slice(0, 4).join('\n').slice(0, 1100);
+  }
+  /* Pause oder zwei, drei fertige Sätze: dann schaut die KI hin */
   function delayFor(row, blkText) {
     if (row._replyTo) return AUTO.idleReply;
+    var chain = chainTextUpTo(row), fresh = chain.text.slice(Math.min((chain.head && chain.head._seen) || 0, chain.text.length));
+    var sentences = (fresh.match(/[.!?…]+["”')\]]*(?:\s|$)/g) || []).length;
+    if (sentences >= 3) return 500;
+    if (sentences >= 2 && fresh.length >= 110) return 900;
     return /[.!?…]["”')\]]?\s*$/.test(blkText) ? AUTO.idleSentence : AUTO.idle;
   }
 
@@ -538,6 +550,7 @@
     if (existing) { reveal(existing); return; }
     var r = makeRow('p');
     r._replyTo = note;
+    r.classList.add('is-reply');
     setQuote(r, quote);
     var after = note.row;
     note.replyRows = note.replyRows.filter(function (x) { return x.isConnected; });
@@ -837,6 +850,7 @@
       var parent = state.noteIndex[x.id];
       if (!parent) return;
       x.row._replyTo = parent;
+      x.row.classList.add('is-reply');
       parent.replyRows.push(x.row);
       setQuote(x.row, x.quote);
     });
@@ -874,7 +888,15 @@
     var b = el('button', 'ftab');
     b.type = 'button';
     b.appendChild(el('span', 'ftab__label'));
-    b.addEventListener('click', function () { openDoc(doc); });
+    var x = el('span', 'ftab__x', '×');
+    x.setAttribute('role', 'button');
+    x.setAttribute('aria-label', 'Delete this note');
+    x.addEventListener('click', function (e) {
+      e.stopPropagation();
+      openConfirm(doc, b, state.single ? 'up' : (b.dataset.side === 'l' ? 'l' : 'r'));
+    });
+    b.appendChild(x);
+    b.addEventListener('click', function () { closeConfirm(); openDoc(doc); });
     return b;
   }
   function layoutTabs() {
@@ -884,7 +906,7 @@
     docs.forEach(function (d, i) {
       if (!d.tab) d.tab = makeTab(d);
       var b = d.tab, lab = b.firstChild;
-      if (!state.flip || !b._titled) { var title = titleOf(d); b._titled = true; if (lab.textContent !== title) lab.textContent = title; b.title = title; }
+      if (!state.flip || !b._titled) { var title = titleOf(d); b._titled = true; if (lab.textContent !== title) lab.textContent = title; }
       b.style.setProperty('--c', TAB_COLORS[i % TAB_COLORS.length]);
       b.style.setProperty('--tilt', ((i % 3) - 1) * 0.55 + 'deg');
       b.style.top = 26 + i * (tabH + gap) + 'px';
@@ -1068,6 +1090,7 @@
     }
     /* das Ziel ist schon die aufgeschlagene (oder gerade aufgehende) Seite: sofort dort weiterschreiben */
     if (idx === state.cur && !state.queued) { if (opts.focus === state.pending) state.pending = null; syncChrome(); arrive(); return; }
+    closeConfirm();
     if (state.flip) {
       /* es wird gerade geblättert: das laufende Blatt schneller zu Ende führen, dann weiter */
       state.flip.speedUp();
@@ -1093,38 +1116,116 @@
     layoutTabs();
     save();
   }
-  function handleDelete() {
-    if (!delBtn.classList.contains('is-armed')) {
-      delBtn.classList.add('is-armed');
-      delBtn.textContent = 'Really remove?';
-      setTimeout(function () { delBtn.classList.remove('is-armed'); delBtn.textContent = 'Remove note'; }, 3000);
-      return;
+  /* Löschen: kleines x am Reiter oder der Mülleimer fragt nach, dann fliegt das Papier in den Eimer */
+  var delTarget = null;
+  function closeConfirm() { confirmEl.hidden = true; delTarget = null; confirmEl._anchor = null; }
+  function openConfirm(doc, anchor, kind) {
+    if (!confirmEl.hidden && confirmEl._anchor === anchor) { closeConfirm(); return; }
+    delTarget = doc;
+    confirmEl._anchor = anchor;
+    confirmEl.hidden = false;
+    var br = book.getBoundingClientRect(), ar = anchor.getBoundingClientRect(), s = confirmEl.style;
+    s.left = s.right = s.top = s.bottom = 'auto';
+    confirmEl.dataset.kind = kind;
+    if (kind === 'up') {
+      var mid = Math.max(140, Math.min(br.width - 140, ar.left + ar.width / 2 - br.left));
+      s.left = mid + 'px'; s.bottom = (br.bottom - ar.top + 12) + 'px';
+    } else {
+      s.top = (ar.top + ar.height / 2 - br.top) + 'px';
+      if (kind === 'l') s.left = (ar.right - br.left + 16) + 'px'; else s.right = (br.right - ar.left + 16) + 'px';
     }
-    delBtn.classList.remove('is-armed');
-    delBtn.textContent = 'Remove note';
-    var doc = curSpread().doc;
+  }
+  confirmEl.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('button');
+    if (!b) return;
+    var doc = delTarget;
+    closeConfirm();
+    if (b.dataset.act === 'delete' && doc && state.docs.indexOf(doc) >= 0) deleteDoc(doc);
+  });
+  document.addEventListener('pointerdown', function (e) {
+    if (confirmEl.hidden) return;
+    if (e.target.closest && (e.target.closest('#confirm') || e.target.closest('.ftab__x') || e.target.closest('#bin'))) return;
+    closeConfirm();
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !confirmEl.hidden) closeConfirm(); });
+  binBtn.addEventListener('click', function () {
+    var cs = curSpread();
+    if (cs) openConfirm(cs.doc, binBtn, 'up');
+  });
+
+  /* Jede Seite der Notiz wird als Blatt nachgebaut, knüllt sich zusammen und fliegt in den Eimer */
+  function makeSheets(doc) {
+    var W = book.clientWidth, H = book.clientHeight, single = state.single, half = single ? W : W / 2, out = [];
+    doc.spreads.slice(0, 3).forEach(function (sp) {
+      (single ? ['r'] : ['r', 'l']).forEach(function (side) {
+        var left = side === 'r' && !single ? W / 2 : 0;
+        var d = el('div', 'tsheet'), face = el('div', 'face');
+        d.style.cssText = 'width:' + half + 'px;height:' + H + 'px;left:' + left + 'px';
+        var pp = el('div', 'paper paper--' + side);
+        pp.style.cssText = 'position:absolute;top:0;height:100%;width:' + half + 'px;left:0';
+        var c = cloneSpread(sp);
+        c.style.cssText = 'position:absolute;top:0;width:' + W + 'px;height:' + H + 'px;left:' + (side === 'r' && !single ? -W / 2 : 0) + 'px';
+        var crease = el('div', 'crease');
+        face.append(pp, c);
+        d.append(face, crease);
+        out.push({ el: d, crease: crease, cx: left + half / 2, cy: H / 2 });
+      });
+    });
+    return out.slice(0, 6);
+  }
+  function flyToBin(sheets, isCur, tabRect) {
+    var br = book.getBoundingClientRect(), bb = binBtn.getBoundingClientRect();
+    var bx = bb.left + bb.width / 2 - br.left, by = bb.top + bb.height * 0.3 - br.top;
+    var tx0 = tabRect ? tabRect.left + tabRect.width / 2 - br.left : bx, ty0 = tabRect ? tabRect.top + tabRect.height / 2 - br.top : by;
+    var P0 = 'polygon(0 0,50% 0,100% 0,100% 50%,100% 100%,50% 100%,0 100%,0 50%)';
+    var P1 = 'polygon(7% 5%,46% 13%,93% 3%,87% 47%,95% 93%,55% 85%,5% 95%,13% 53%)';
+    var P2 = 'polygon(14% 12%,44% 20%,84% 8%,80% 46%,88% 84%,56% 78%,12% 88%,20% 50%)';
+    sheets.slice().reverse().forEach(function (sh) { trashLayer.appendChild(sh.el); });
+    sheets.forEach(function (sh, i) {
+      var sx = isCur ? 0 : tx0 - sh.cx, sy = isCur ? 0 : ty0 - sh.cy, s0 = isCur ? 1 : 0.14;
+      var dx = bx - sh.cx, dy = by - sh.cy, rot = (i % 2 ? 1 : -1) * (150 + i * 45), delay = i * 170, dur = 1200;
+      var end = 'translate(' + dx + 'px,' + dy + 'px) scale(0.07) rotate(' + rot + 'deg)';
+      var an = sh.el.animate([
+        { transform: 'translate(' + sx + 'px,' + sy + 'px) scale(' + s0 + ') rotate(0deg)', clipPath: P0, opacity: isCur ? 1 : 0, offset: 0 },
+        { transform: 'translate(' + sx * 0.5 + 'px,' + sy * 0.5 + 'px) scale(' + (isCur ? 0.6 : 0.4) + ') rotate(-7deg)', clipPath: P1, opacity: 1, offset: 0.3 },
+        { transform: 'translate(' + dx * 0.55 + 'px,' + (dy * 0.4 - 140) + 'px) scale(0.26) rotate(' + rot * 0.45 + 'deg)', clipPath: P2, opacity: 1, offset: 0.62 },
+        { transform: end, clipPath: P2, opacity: 1, offset: 0.94 },
+        { transform: end, clipPath: P2, opacity: 0, offset: 1 }
+      ], { duration: dur, delay: delay, easing: 'cubic-bezier(.5,.05,.4,1)', fill: 'both' });
+      sh.crease.animate([{ opacity: 0 }, { opacity: 0.9 }], { duration: dur * 0.35, delay: delay, easing: 'ease-out', fill: 'both' });
+      setTimeout(function () {
+        binBtn.classList.add('is-hot');
+        var ic = binBtn.firstElementChild;
+        if (ic && ic.animate) ic.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.16,0.88)' }, { transform: 'scale(0.97,1.05)' }, { transform: 'scale(1)' }], { duration: 320 });
+      }, delay + dur * 0.9);
+      an.onfinish = function () { sh.el.remove(); if (!trashLayer.firstChild) binBtn.classList.remove('is-hot'); };
+    });
+  }
+  function deleteDoc(doc) {
     finishFlip();
     state.pending = null;
+    var cs = curSpread(), isCur = !!cs && cs.doc === doc;
+    var tabRect = doc.tab ? doc.tab.getBoundingClientRect() : null;
+    var sheets = reduced || !Element.prototype.animate ? [] : makeSheets(doc);
     if (state.docs.length === 1) {
       doc.spreads.slice(1).forEach(function (s) { s.el.remove(); });
       doc.spreads.length = 1;
       doc.spreads[0].sheet.textContent = '';
       addRow(null, 'p', '', doc.spreads[0].sheet);
       state.cur = 0;
-      syncChrome(); save();
-      return;
+    } else {
+      var di = state.docs.indexOf(doc);
+      var targetDoc = state.docs[di + 1] || state.docs[di - 1];
+      var keep = isCur ? targetDoc.spreads[0] : cs;
+      state.docs.splice(di, 1);
+      doc.spreads.forEach(function (s) { s.el.remove(); });
+      if (doc.tab) doc.tab.remove();
+      state.cur = flat().indexOf(keep);
+      state.tabCur = state.cur;
     }
-    var di = state.docs.indexOf(doc);
-    var targetDoc = state.docs[di + 1] || state.docs[di - 1];
-    var targetSpread = targetDoc.spreads[0];
-    state.docs.splice(di, 1);
-    doc.spreads.forEach(function (s) { s.el.remove(); });
-    if (doc.tab) doc.tab.remove();
-    state.cur = flat().indexOf(targetSpread);
-    syncChrome();
-    save();
+    syncChrome(); save();
+    flyToBin(sheets, isCur, tabRect);
   }
-  delBtn.addEventListener('click', handleDelete);
 
   /* ---------- Start ---------- */
   function load() {
