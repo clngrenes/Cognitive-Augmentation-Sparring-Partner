@@ -8,6 +8,8 @@
   <meta name="theme-color" content="#0b0a09">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231d2b27'/%3E%3Crect x='9' y='5' width='14' height='22' rx='1' fill='%23e8d9b2'/%3E%3Crect x='6' y='4' width='20' height='4' rx='2' fill='%23a3764a'/%3E%3C/svg%3E">
   <link rel="preload" href="fonts/KleeOne-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="img/roll-l.png" as="image">
+  <link rel="preload" href="img/bin.png" as="image">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -23,16 +25,7 @@
       </nav>
       <div class="binrow">
         <button class="bin" id="bin" type="button" aria-label="Delete this scroll">
-          <svg viewBox="0 0 64 74" width="52" height="61" aria-hidden="true">
-            <defs>
-              <linearGradient id="binb" x1="0" x2="1"><stop offset="0" stop-color="#6f6858"/><stop offset=".45" stop-color="#9a927e"/><stop offset="1" stop-color="#5d5748"/></linearGradient>
-            </defs>
-            <path d="M9 18 L14 68 Q14.4 71 18 71 L46 71 Q49.6 71 50 68 L55 18 Z" fill="url(#binb)"/>
-            <g stroke="#3f3a30" stroke-width="1.3" opacity=".55" fill="none"><path d="M20 20 L22 70"/><path d="M27 20 L28 70"/><path d="M34 20 L34 70"/><path d="M41 20 L40 70"/><path d="M48 20 L46 70"/></g>
-            <path d="M11 33 L53 33 M12.2 48 L51.8 48 M13.2 62 L50.8 62" stroke="#3f3a30" stroke-width="1.6" opacity=".6" fill="none"/>
-            <ellipse cx="32" cy="18" rx="24" ry="6.4" fill="#2a251e"/>
-            <ellipse cx="32" cy="18" rx="24" ry="6.4" fill="none" stroke="#b3aa92" stroke-width="2.4"/>
-          </svg>
+          <img src="img/bin.png" width="88" height="113" alt="" draggable="false">
         </button>
       </div>
     </aside>
@@ -41,8 +34,8 @@
         <div class="sheetbox" id="box"></div>
         <div class="rollshade"></div>
         <div class="roller" aria-hidden="true">
-          <i class="rod rod--l"><b class="knob"></b></i>
-          <i class="rod rod--r"><b class="knob"></b></i>
+          <i class="roller__m"></i><i class="roller__l"></i><i class="roller__r"></i>
+          <b class="band band--l"></b><b class="band band--r"></b>
         </div>
         <div class="trashlayer" id="trashlayer" aria-hidden="true"></div>
       </div>

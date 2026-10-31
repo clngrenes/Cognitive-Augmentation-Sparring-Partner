@@ -258,7 +258,7 @@
     n.words = buildWords(art, txt, instant);
     (marks || []).forEach(function (m) { for (var i = m[0]; i <= m[1]; i++) n.mk[i] = true; });
     applyMarks(n);
-    var x = el('span', 'note__x', '×');
+    var x = el('span', 'note__x');
     x.setAttribute('role', 'button');
     x.setAttribute('aria-label', 'Remove this thought');
     art.appendChild(x);
@@ -723,7 +723,7 @@
     it.appendChild(el('span', 'si__t'));
     var act = el('span', 'si__act');
     var pal = el('span', 'si__pal'); pal.setAttribute('role', 'button'); pal.setAttribute('aria-label', 'Change color');
-    var x = el('span', 'si__x', '×'); x.setAttribute('role', 'button'); x.setAttribute('aria-label', 'Delete this scroll');
+    var x = el('span', 'si__x'); x.setAttribute('role', 'button'); x.setAttribute('aria-label', 'Delete this scroll');
     act.append(pal, x);
     it.appendChild(act);
     pal.addEventListener('click', function (e) { e.stopPropagation(); openPalette(d, pal); });
@@ -867,52 +867,63 @@
     Array.prototype.forEach.call(c.querySelectorAll('[tabindex]'), function (n) { n.removeAttribute('tabindex'); });
     return c;
   }
-  function makeSheets(d, startTop) {
-    var W = box.clientWidth, H = box.clientHeight, total = d.el.offsetHeight, out = [], k;
-    for (k = 0; k < 3; k++) {
-      var top = startTop + k * H;
-      if (k > 0 && top > total - H * 0.35) break;
-      var s = el('div', 'tsheet');
-      s.style.cssText = 'width:' + W + 'px;height:' + H + 'px';
-      var c = cloneDoc(d);
-      c.style.cssText = 'width:' + W + 'px;transform:translateY(' + (-top) + 'px);display:block';
-      s.append(c, el('div', 'crease'));
-      out.push({ el: s, crease: s.lastChild, cx: W / 2, cy: H / 2 });
-    }
-    return out;
+  function makeSheet(d, top) {
+    var W = box.clientWidth, H = box.clientHeight;
+    var sh = el('div', 'tsheet');
+    sh.style.cssText = 'width:' + W + 'px;height:' + H + 'px';
+    var c = cloneDoc(d);
+    c.style.cssText = 'width:' + W + 'px;transform:translateY(' + (-top) + 'px);display:block';
+    sh.append(c);
+    return sh;
   }
-  function flyToBin(sheets, isCur, itemRect) {
-    var br = wrap.getBoundingClientRect(), bb = binBtn.getBoundingClientRect();
-    var bx = bb.left + bb.width / 2 - br.left, by = bb.top + bb.height * 0.3 - br.top;
-    var tx0 = itemRect ? itemRect.left + itemRect.width / 2 - br.left : bx, ty0 = itemRect ? itemRect.top + itemRect.height / 2 - br.top : by;
-    var P0 = 'polygon(0 0,50% 0,100% 0,100% 50%,100% 100%,50% 100%,0 100%,0 50%)';
-    var P1 = 'polygon(7% 5%,46% 13%,93% 3%,87% 47%,95% 93%,55% 85%,5% 95%,13% 53%)';
-    var P2 = 'polygon(14% 12%,44% 20%,84% 8%,80% 46%,88% 84%,56% 78%,12% 88%,20% 50%)';
-    sheets.slice().reverse().forEach(function (sh) { trashLayer.appendChild(sh.el); });
-    sheets.forEach(function (sh, i) {
-      var sx = isCur ? 0 : tx0 - sh.cx, sy = isCur ? 0 : ty0 - sh.cy, s0 = isCur ? 1 : 0.1;
-      var dx = bx - sh.cx, dy = by - sh.cy, rot = (i % 2 ? 1 : -1) * (150 + i * 45), delay = i * 190, dur = 1250;
-      var end = 'translate(' + dx + 'px,' + dy + 'px) scale(0.05) rotate(' + rot + 'deg)';
-      var an = sh.el.animate([
-        { transform: 'translate(' + sx + 'px,' + sy + 'px) scale(' + s0 + ') rotate(0deg)', clipPath: P0, opacity: isCur ? 1 : 0, offset: 0 },
-        { transform: 'translate(' + sx * 0.5 + 'px,' + sy * 0.5 + 'px) scale(' + (isCur ? 0.46 : 0.3) + ') rotate(-7deg)', clipPath: P1, opacity: 1, offset: 0.3 },
-        { transform: 'translate(' + dx * 0.55 + 'px,' + (dy * 0.4 - 140) + 'px) scale(0.2) rotate(' + rot * 0.45 + 'deg)', clipPath: P2, opacity: 1, offset: 0.62 },
-        { transform: end, clipPath: P2, opacity: 1, offset: 0.94 },
-        { transform: end, clipPath: P2, opacity: 0, offset: 1 }
-      ], { duration: dur, delay: delay, easing: 'cubic-bezier(.5,.05,.4,1)', fill: 'both' });
-      sh.crease.animate([{ opacity: 0 }, { opacity: 0.9 }], { duration: dur * 0.35, delay: delay, easing: 'ease-out', fill: 'both' });
-      setTimeout(function () {
-        binBtn.classList.add('is-hot');
-        var ic = binBtn.firstElementChild;
-        if (ic && ic.animate) ic.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.16,0.88)' }, { transform: 'scale(0.97,1.05)' }, { transform: 'scale(1)' }], { duration: 320 });
-      }, delay + dur * 0.9);
-      an.onfinish = function () { sh.el.remove(); if (!trashLayer.firstChild) binBtn.classList.remove('is-hot'); };
-    });
+  /* 1. Das Blatt rollt sich von unten nach oben auf, bis es in der Walze verschwindet */
+  function rollUp(sheet, done) {
+    var H = box.clientHeight, end = 20, dur = 1200, ease = 'cubic-bezier(.5,.05,.35,1)';
+    var tube = el('div', 'rollup');
+    trashLayer.append(sheet, tube);
+    sheet.animate([{ clipPath: 'inset(0 0 0px 0)' }, { clipPath: 'inset(0 0 ' + (H - end) + 'px 0)' }], { duration: dur, easing: ease, fill: 'forwards' });
+    var a = tube.animate([
+      { transform: 'translateY(' + (H - 17) + 'px) scaleY(0.4)' },
+      { transform: 'translateY(' + (end - 17) + 'px) scaleY(1)' }
+    ], { duration: dur, easing: ease, fill: 'forwards' });
+    a.onfinish = function () { sheet.remove(); tube.remove(); done(); };
+  }
+  /* 2. Die fertige Rolle fliegt in den Eimer (der Eimer ist ein Gitter, man sieht sie darin) */
+  function dropIntoBin(color, from) {
+    var src = wrap.querySelector('.roller'), rr = src.getBoundingClientRect();
+    var img = binBtn.querySelector('img'), br = img.getBoundingClientRect();
+    var fl = el('div', 'flyer'), ro = src.cloneNode(true);
+    ro.style.setProperty('--c', color);
+    fl.style.cssText = 'left:' + rr.left + 'px;top:' + rr.top + 'px;width:' + rr.width + 'px;height:' + rr.height + 'px';
+    fl.appendChild(ro);
+    var bf = el('div', 'binfront'), bi = img.cloneNode();
+    bf.style.cssText = 'left:' + br.left + 'px;top:' + br.top + 'px;width:' + br.width + 'px;height:' + br.height + 'px';
+    bf.appendChild(bi);
+    document.body.append(fl, bf);
+    binBtn.style.visibility = 'hidden';
+    var fx = rr.left + rr.width / 2, fy = rr.top + rr.height / 2;
+    var sx = from ? from.x - fx : 0, sy = from ? from.y - fy : 0, k0 = from ? [0.07, 0.22] : [1, 1];
+    var tx = br.left + br.width / 2 - fx, ty = br.top + br.height * 0.1 - fy;
+    function tf(x, y, rot, a, b) { return 'translate(' + x + 'px,' + y + 'px) rotate(' + rot + 'deg) scale(' + a + ',' + b + ')'; }
+    var an = fl.animate([
+      { transform: tf(sx, sy, 0, k0[0], k0[1]), offset: 0 },
+      { transform: tf(sx + (tx - sx) * 0.08, sy + (ty - sy) * 0.05 - 34, -4, from ? 0.2 : 0.62, from ? 0.4 : 0.8), offset: 0.2 },
+      { transform: tf(sx + (tx - sx) * 0.7, sy + (ty - sy) * 0.45 - 130, -42, 0.12, 0.34), offset: 0.58 },
+      { transform: tf(tx, ty - 70, -88, 0.075, 0.3), offset: 0.84 },
+      { transform: tf(tx, ty + 52, -90, 0.075, 0.3), offset: 1 }
+    ], { duration: 1250, easing: 'cubic-bezier(.45,.05,.4,1)', fill: 'forwards' });
+    an.onfinish = function () {
+      fl.remove();
+      if (bi.animate) bi.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.1,0.9)' }, { transform: 'scale(0.98,1.04)' }, { transform: 'scale(1)' }], { duration: 340 });
+      setTimeout(function () { bf.remove(); binBtn.style.visibility = ''; }, 360);
+    };
+    return fl;
   }
   function deleteDoc(d) {
-    var isCur = state.cur === d;
+    var isCur = state.cur === d, color = d.color;
     var itemRect = d.item ? d.item.getBoundingClientRect() : null;
-    var sheets = reduced || !Element.prototype.animate ? [] : makeSheets(d, isCur ? box.scrollTop : 0);
+    var anim = !reduced && !!Element.prototype.animate;
+    var sheet = anim && isCur ? makeSheet(d, box.scrollTop) : null;
     state.queued = null;
     if (state.docs.length === 1) {
       docRows(d).forEach(function (r) { r.remove(); });
@@ -932,8 +943,32 @@
       }
     }
     refreshRail();
+    foldAll(state.cur);
     save();
-    flyToBin(sheets, isCur, itemRect);
+    if (!anim) return;
+    if (!isCur) {
+      dropIntoBin(color, itemRect ? { x: itemRect.left + 3.4 * 8 + 14, y: itemRect.top + itemRect.height / 2 } : null);
+      return;
+    }
+    var next = state.cur.color;
+    state.switching = true;
+    box.style.visibility = 'hidden';
+    wrap.style.setProperty('--c', color);
+    rollUp(sheet, function () {
+      dropIntoBin(color, null);
+      wrap.classList.add('is-bare');
+      setTimeout(function () {
+        wrap.style.setProperty('--c', next);
+        box.style.visibility = '';
+        wrap.classList.remove('is-bare');
+        box.animate([{ clipPath: 'inset(0 0 100% 0)' }, { clipPath: 'inset(0 0 0 0)' }], { duration: 600, easing: 'cubic-bezier(.2,.7,.2,1)', fill: 'backwards' }).onfinish = function () {
+          state.switching = false;
+          var q = state.queued; state.queued = null;
+          if (q) switchTo(q.d, true, q.done);
+        };
+      }, 560);
+    });
+    sheet.style.setProperty('--c', color);
   }
 
   /* ---------- Start ---------- */
