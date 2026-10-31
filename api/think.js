@@ -25,6 +25,8 @@ const SYSTEM = [
   'Special lines in the conversation:',
   '- "[Other notes in this notebook]" lists their other notes for connections. Use it only when it really sharpens the point.',
   '- "[New text since your last note]" marks what they wrote after your previous note. React to the new text only.',
+  '- "[They edited their text above. Removed: "..." Replaced by: "..."]" followed by "[Current text]" means they deleted or corrected text your earlier note was based on. Treat the current text as the truth. If your earlier note rested on removed words, it no longer holds: say so briefly or build on the corrected version. Never quote the removed words back as if they were still there.',
+  '- "[The text continues after this passage: ...]" is what they wrote further down. Use it only for context; do not comment on it.',
   '- "[Refers to your passage: "..."]" means they marked exactly that passage of your earlier note and comment on it. Respond to that passage.',
   '- "[Direct reply to your note]" means they answer or question you. Never SKIP then. Answer the content first and concretely. If they ask what you meant, explain that note in plain words with one concrete example. At most three short sentences.',
   'Examples of the level, on other topics (do not copy):',

@@ -1,25 +1,20 @@
 # Sparring
 
-Prototype of a writing interface: a vintage notebook where you write on the left and an AI thinks along on the right. When it has something worth adding, it writes one short thought in the margin, in the same handwriting, and gradually, word by word. It never writes into your text.
+Prototype of a writing interface: an endless scroll of vintage paper where you write on the left and an AI thinks along on the right. When it has something worth adding, it writes one short thought in the margin, in the same handwriting, word by word. It never writes into your text.
 
 Plain HTML, CSS and JavaScript plus one Vercel function (`api/think.js`) that talks to Gemini.
 
 ## How it works
 
+- **Scrolls instead of pages.** Each note is one endless scroll that hangs from a roller and just keeps growing downwards. No page breaks, no flipping. The list of scrolls is on the left, with a "New scroll" button. Each scroll has its own colour (the caps of its roller and the bar in the list): hover an entry and click the dot to change it. Switching scrolls rolls the old one up and unrolls the other.
 - There is no send button and no need to press Enter. Write. When you pause (about 1.5 s after a sentence, a few seconds mid-sentence) or have written two to three sentences, the AI looks at the new text and decides itself whether it can add something valuable. If not, it stays silent (the model answers `SKIP`). Enter simply starts a new paragraph.
-- The notes are deliberately short (one or two sentences) and work on *your* thinking, not on the topic: the assumption under your claim, a tension between two of your statements (also across notes), the sharpest objection to exactly what you wrote, the step you did not take. No trivia, no praise. It answers in the language you write in.
-- The cursor on the right page is a highlighter. Drag over a passage of an AI note to mark it. A new paragraph with an ink dot opens on the left, and the AI sees exactly which passage you refer to. Click a marked passage, or the empty right page, to take marks back (empty reply blocks disappear with them). Click a note without dragging to reply to the whole note.
-- Turning pages: click the curled corners, use `Page Up` and `Page Down`, click a tab, or swipe on a phone. The leaf bends like paper.
-- Hover a tab and a small × appears: it asks whether you really want to delete the note, then the pages crumple and fly into the wastebasket under the book (the basket itself works too, for the open note). Every note has a sticky tab on the edge of the book. Notes before the open spread hang on the left, later ones on the right. The cream "new" tab starts a note.
-- `# ` makes a title, `- ` a list. `Esc` selects a block (arrows move, `Del` removes, `Enter` continues writing).
+- **It notices edits.** If you delete or correct something further up, the AI is told what was removed and what replaced it, so it does not keep arguing with words that are gone. It also sees what you wrote after a passage.
+- The notes are deliberately short (one or two sentences) and work on *your* thinking, not on the topic: the assumption under your claim, a tension between two of your statements (also across scrolls), the sharpest objection to exactly what you wrote, the step you did not take. No trivia, no praise. It answers in the language you write in.
+- The cursor on the right half is a highlighter. Drag over a passage of an AI note to mark it. A new paragraph with an ink dot opens on the left, and the AI sees exactly which passage you refer to. Click a marked passage, or the empty right half, to take marks back (empty reply blocks disappear with them). Click a note without dragging to reply to the whole note.
+- Hover a scroll in the list and a small × appears: it asks whether you really want to delete the scroll, then the sheet crumples and flies into the wastebasket at the bottom (the basket itself works too, for the open scroll).
+- `# ` makes a title, `- ` a list. `Esc` selects a block (arrows move, `Del` removes, `Enter` continues writing). On a phone the list moves to the top and the scroll becomes a single column.
 
-## When a new page starts
-
-1. Your text runs line by line to the last rule and continues on the next page. A long paragraph never jumps as a whole.
-2. If there is no room left beside your block for a note, your next block starts at the top of the next page. The page turns when you keep writing or click the corner.
-3. If a block with its note slides to the next page, the book turns with it.
-
-Notes live only in your browser (`localStorage`). Nothing is stored on a server.
+Scrolls live only in your browser (`localStorage`). Nothing is stored on a server. Notes from the earlier book version are carried over as scrolls.
 
 ## Setting up the AI
 
