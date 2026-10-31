@@ -186,8 +186,11 @@
     me.append(body);
     var ai = el('div', 'cell cell--ai');
     ai.setAttribute('aria-live', 'polite');
-    row.append(me, ai);
-    row._blk = blk; row._ai = ai;
+    var fold = el('button', 'fold');
+    fold.type = 'button';
+    fold.textContent = 'Show all';
+    row.append(me, ai, fold);
+    row._blk = blk; row._ai = ai; row._fold = fold;
     setType(row, type || 'p');
     return row;
   }
@@ -234,12 +237,18 @@
   function applyMarks(n) {
     Array.prototype.forEach.call(n.el.querySelectorAll('.w'), function (s, i) { s.classList.toggle('mk', !!n.mk[i]); });
   }
+  /* Wort für Wort: ein Takt entscheidet, wie viele Wörter schon da sind, so erscheinen sie immer von vorn nach hinten */
   function revealWords(p) {
-    var spans = p.querySelectorAll('.w');
-    Array.prototype.forEach.call(spans, function (s, i) {
-      if (reduced) s.classList.add('on');
-      else setTimeout(function () { s.classList.add('on'); }, 60 + i * 115);
-    });
+    var spans = p.querySelectorAll('.w'), n = spans.length, shown = 0, t0 = performance.now();
+    function all() { while (shown < n) spans[shown++].classList.add('on'); }
+    if (reduced) { all(); return; }
+    function tick(now) {
+      if (!p.isConnected) { all(); return; }
+      var k = Math.min(n, Math.floor((now - t0 - 60) / 115) + 1);
+      while (shown < k) spans[shown++].classList.add('on');
+      if (shown < n) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
   }
   function renderNote(row, txt, instant, id, marks) {
     var art = el('p', 'note');
@@ -249,9 +258,14 @@
     n.words = buildWords(art, txt, instant);
     (marks || []).forEach(function (m) { for (var i = m[0]; i <= m[1]; i++) n.mk[i] = true; });
     applyMarks(n);
+    var x = el('span', 'note__x', '×');
+    x.setAttribute('role', 'button');
+    x.setAttribute('aria-label', 'Remove this thought');
+    art.appendChild(x);
     art._note = n;
     state.noteIndex[n.id] = n;
     row._ai.appendChild(art);
+    updateFold(row);
     if (!instant) { revealWords(art); ensureVisible(document.activeElement && document.activeElement.closest && document.activeElement.closest('.row')); }
     saveSoon();
     return n;
@@ -260,6 +274,45 @@
     var p = el('p', 'note note--off', 'No connection to the AI.');
     row._ai.appendChild(p);
     setTimeout(function () { p.remove(); }, 6000);
+  }
+
+  /* Rechts nie höher als sechs Zeilen: ist mehr da, erscheint "Show all" */
+  function updateFold(row) {
+    var d = docOf(row);
+    if (!d || !d.el.classList.contains('is-current') || !row.isConnected) return;
+    var ai = row._ai, ns = ai.querySelectorAll('.note:not(.note--off)'), over = false, lines = 6;
+    /* Ist dein Text länger als sechs Zeilen, darf rechts bis zu dessen Ende stehen */
+    if (!state.single) lines = Math.max(6, Math.ceil((row._blk.getBoundingClientRect().height - 2) / state.L));
+    if (row._cap !== lines) { row._cap = lines; row.style.setProperty('--cap', lines); }
+    if (ns.length) over = ns[ns.length - 1].getBoundingClientRect().bottom - ai.getBoundingClientRect().top > state.L * lines + 2;
+    row.classList.toggle('is-foldable', over);
+    if (!over) row.classList.remove('is-open');
+    row._fold.textContent = row.classList.contains('is-open') ? 'Fold' : 'Show all';
+  }
+  function foldAll(d) { if (d) docRows(d).forEach(updateFold); }
+  function removeNote(n) {
+    var art = n.el, row = n.row;
+    if (n.gone) return;
+    n.gone = true;
+    delete state.noteIndex[n.id];
+    n.replyRows.slice().forEach(function (r) {
+      if (!r.isConnected) return;
+      if (!text(r._blk).trim()) { removeRow(r); return; }
+      r._replyTo = null; r._quote = null;
+      r.classList.remove('is-reply');
+      r._blk.dataset.placeholder = PLACEHOLDER[r.dataset.type] || PLACEHOLDER.p;
+    });
+    n.replyRows = [];
+    function done() {
+      art.remove();
+      if (!row._ai.querySelector('.note:not(.note--off)')) row._snap = '';
+      updateFold(row);
+      saveSoon();
+    }
+    if (reduced || !art.animate) { done(); return; }
+    art.style.pointerEvents = 'none';
+    var an = art.animate([{ opacity: 1, transform: 'none', filter: 'blur(0)' }, { opacity: 0, transform: 'translateX(18px)', filter: 'blur(3px)' }], { duration: 260, easing: 'ease-in', fill: 'forwards' });
+    an.onfinish = done;
   }
 
   /* Gesprächsverlauf bis einschließlich dieser Zeile. Es zählt immer der aktuelle Text:
@@ -518,6 +571,7 @@
       }
     }
     ensureVisible(row);
+    if (row._ai.firstChild) updateFold(row);
     scheduleThought(row, delayFor(row));
     saveSoon();
   });
@@ -550,6 +604,7 @@
     if (!blk) {
       var note = e.target.closest('.note');
       if (note && note._note && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openReply(note._note); }
+      else if (note && note._note && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); removeNote(note._note); }
       return;
     }
 
@@ -598,6 +653,15 @@
   });
   box.addEventListener('click', function (e) {
     if (justMarked) return;
+    var fb = e.target.closest && e.target.closest('.fold');
+    if (fb) {
+      var fr = fb.closest('.row');
+      fr.classList.toggle('is-open');
+      updateFold(fr);
+      return;
+    }
+    var xb = e.target.closest && e.target.closest('.note__x');
+    if (xb) { e.preventDefault(); removeNote(xb.closest('.note')._note); return; }
     var noteEl = e.target.closest && e.target.closest('.note');
     var d = state.cur;
     if (!noteEl || !noteEl._note) {
@@ -645,7 +709,6 @@
     if (!docRows(d).length) addRow(null, 'p', '', d);
   }
 
-  var ICON = '<svg class="si__icon" viewBox="0 0 30 38" aria-hidden="true"><rect x="5" y="3" width="20" height="5" rx="2.5" class="roll"/><path d="M7.5 8 H22.5 V30 H7.5 Z" class="paper"/><path d="M10 14 H20 M10 18.5 H20 M10 23 H17" stroke="rgba(58,98,108,.45)" stroke-width="1.2" fill="none"/><rect x="5" y="29" width="20" height="5" rx="2.5" class="roll"/><rect x="7.5" y="3" width="3" height="5" class="band"/><rect x="19.5" y="29" width="3" height="5" class="band"/></svg>';
   function titleOf(d) {
     var rows = docRows(d), i, t;
     for (i = 0; i < rows.length; i++) if (rows[i].dataset.type === 'h1' && (t = text(rows[i]._blk).trim())) return shorten(t, 26);
@@ -656,7 +719,7 @@
     var it = el('div', 'si');
     it.tabIndex = 0;
     it.setAttribute('role', 'button');
-    it.innerHTML = ICON;
+    it.innerHTML = '<span class="si__hole"><i class="si__scroll"></i></span>';
     it.appendChild(el('span', 'si__t'));
     var act = el('span', 'si__act');
     var pal = el('span', 'si__pal'); pal.setAttribute('role', 'button'); pal.setAttribute('aria-label', 'Change color');
@@ -705,6 +768,7 @@
       state.cur = d;
       d.el.classList.add('is-current');
       box.scrollTop = d.scroll || 0;
+      foldAll(d);
       refreshRail();
       save();
     }
@@ -916,6 +980,8 @@
   refreshRail();
   box.scrollTop = state.cur.scroll || 0;
   state.ready = true;
+  foldAll(state.cur);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { foldAll(state.cur); });
 
-  window.addEventListener('resize', function () { clearTimeout(state.rz); state.rz = setTimeout(function () { metrics(); closePops(); }, 120); });
+  window.addEventListener('resize', function () { clearTimeout(state.rz); state.rz = setTimeout(function () { metrics(); closePops(); foldAll(state.cur); }, 120); });
 })();

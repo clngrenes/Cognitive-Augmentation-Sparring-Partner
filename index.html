@@ -12,21 +12,15 @@
 </head>
 <body>
   <main class="stage" id="stage">
-    <nav class="rail" id="rail" aria-label="Scrolls">
-      <div class="rail__cap">Scrolls</div>
-      <div class="rail__list" id="list"></div>
-      <button class="si si--new" id="addBtn" type="button">
-        <svg class="si__icon" viewBox="0 0 30 38" aria-hidden="true"><rect x="5" y="3" width="20" height="5" rx="2.5" class="roll"/><path d="M7.5 8 H22.5 V30 H7.5 Z" class="paper"/><rect x="5" y="29" width="20" height="5" rx="2.5" class="roll"/><path d="M15 14 V25 M9.5 19.5 H20.5" class="plus"/></svg>
-        <span class="si__t">New scroll</span>
-      </button>
-    </nav>
-    <section class="main">
-      <div class="scrollwrap" id="wrap">
-        <div class="sheetbox" id="box"></div>
-        <div class="rollshade"></div>
-        <div class="roller" aria-hidden="true"><i class="cap cap--l"></i><i class="cap cap--r"></i></div>
-        <div class="trashlayer" id="trashlayer" aria-hidden="true"></div>
-      </div>
+    <aside class="shelf" id="shelf">
+      <nav class="rack" id="rail" aria-label="Scrolls">
+        <div class="rack__cap">Scrolls</div>
+        <div class="rack__list" id="list"></div>
+        <button class="si si--new" id="addBtn" type="button">
+          <span class="si__hole"><i class="si__plus"></i></span>
+          <span class="si__t">New scroll</span>
+        </button>
+      </nav>
       <div class="binrow">
         <button class="bin" id="bin" type="button" aria-label="Delete this scroll">
           <svg viewBox="0 0 64 74" width="52" height="61" aria-hidden="true">
@@ -40,6 +34,17 @@
             <ellipse cx="32" cy="18" rx="24" ry="6.4" fill="none" stroke="#b3aa92" stroke-width="2.4"/>
           </svg>
         </button>
+      </div>
+    </aside>
+    <section class="main">
+      <div class="scrollwrap" id="wrap">
+        <div class="sheetbox" id="box"></div>
+        <div class="rollshade"></div>
+        <div class="roller" aria-hidden="true">
+          <i class="rod rod--l"><b class="knob"></b></i>
+          <i class="rod rod--r"><b class="knob"></b></i>
+        </div>
+        <div class="trashlayer" id="trashlayer" aria-hidden="true"></div>
       </div>
     </section>
   </main>
