@@ -41,6 +41,36 @@ const SYSTEM = [
   'Output ONLY the note, or the single word SKIP. No preamble, no "You:", no quotation marks around it.'
 ].join('\n');
 
+/* Auf Knopfdruck "I'm stuck": hier darf die KI aktiv anstoßen, auch mit einer Frage, aber nur aus dem Material der Person. */
+const STUCK = [
+  'You are a thinking partner for a person who got stuck while writing and pressed "I\'m stuck". Your purpose is cognitive augmentation: you help THEM think further and get writing again. You never write their text for them.',
+  'You see their current text, the earlier conversation, and possibly "[Other notes in this notebook]" (their other scrolls). Build ONLY on that material. Never invent what they wrote, and never invent sources, studies or numbers.',
+  'Rules for your answer:',
+  '- Speak to them as "you", use their own words and examples so it is obvious what you refer to.',
+  '- At most two sentences, hard limit 35 words. No praise, no summary, no greeting, no lists, no markdown, no advice like "you should", no explaining the topic.',
+  '- Write in the language of their text. If there is no text at all, write in English.',
+  '- Never answer SKIP. They asked for help, so always give something concrete.',
+  'Output ONLY the answer, no preamble, no quotation marks around it.'
+];
+const MODES = {
+  push: [
+    'MODE push: find the most interesting loose thread in their own material: a claim they stated without a reason, a tension between two things they wrote, or a step they stopped short of. Turn it into ONE pointed question or an unfinished sentence they can complete, for example "The part you skipped is why ...".',
+    'If their current text is empty or very thin, look at the other notes for something unresolved. If there is nothing at all, give one concrete writing task: write one sentence you are sure is true, then one reason it might be false.'
+  ],
+  counter: [
+    'MODE counter: argue against their main claim as the strongest honest opponent who read it carefully. Use their own wording. Do not soften it and do not pretend to agree. Start directly with the argument, without a label such as "Counterargument".',
+    'If they have not stated a claim yet, say in one sentence which claim you would attack once they commit to one, and ask them to state it.'
+  ],
+  earlier: [
+    'MODE earlier: connect what they are writing now to something specific they wrote in the OTHER notes. Quote a few of their own words from there and say plainly whether it supports, contradicts or reframes their current text.',
+    'If there are no other notes, or none relates to the current text, say that honestly in one short sentence. Never make up a connection.'
+  ]
+};
+function systemFor(mode) {
+  if (mode && MODES[mode]) return STUCK.concat(MODES[mode]).join('\n');
+  return SYSTEM;
+}
+
 const WINDOW_MS = 10 * 60 * 1000;
 const MAX_REQUESTS = 90;
 const MAX_MESSAGES = 24;
@@ -80,7 +110,7 @@ function thinkingFor(model, attempt) {
   return { thinkingBudget: model.includes('flash') ? 512 : 1024 };
 }
 
-async function callGemini(key, model, contents, thinkingConfig) {
+async function callGemini(key, model, contents, thinkingConfig, system) {
   const generationConfig = { temperature: model.startsWith('gemini-3') ? 1.0 : 0.8, maxOutputTokens: 1200 };
   if (thinkingConfig) generationConfig.thinkingConfig = thinkingConfig;
   return fetch(
@@ -88,19 +118,19 @@ async function callGemini(key, model, contents, thinkingConfig) {
     {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM }] }, contents, generationConfig })
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents, generationConfig })
     }
   );
 }
 
 /* Das stärkste Modell zuerst, bei fehlendem Zugriff oder Limit das nächste. */
-async function generate(key, contents) {
+async function generate(key, contents, system) {
   const primary = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
   const models = [primary, 'gemini-3.1-flash-lite-preview', 'gemini-3.1-pro-preview', 'gemini-2.5-flash'].filter((m, i, a) => a.indexOf(m) === i);
   let lastStatus = 0;
   for (const model of models) {
-    let r = await callGemini(key, model, contents, thinkingFor(model, 0));
-    if (r.status === 400) r = await callGemini(key, model, contents, thinkingFor(model, 1));
+    let r = await callGemini(key, model, contents, thinkingFor(model, 0), system);
+    if (r.status === 400) r = await callGemini(key, model, contents, thinkingFor(model, 1), system);
     if (r.ok) {
       const data = await r.json();
       const parts = data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
@@ -130,7 +160,7 @@ module.exports = async function handler(req, res) {
   if (!contents) { res.status(400).json({ error: 'bad_request' }); return; }
 
   try {
-    const result = await generate(key, contents);
+    const result = await generate(key, contents, systemFor(body.mode));
     if (result.error) { res.status(502).json(result); return; }
     res.status(200).json(result);
   } catch (e) {
@@ -139,3 +169,4 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.SYSTEM = SYSTEM;
+module.exports.systemFor = systemFor;

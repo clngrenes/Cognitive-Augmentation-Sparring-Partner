@@ -377,13 +377,13 @@
     }
     return t;
   }
-  function fetchThought(messages) {
+  function fetchThought(messages, mode) {
     var ctrl = new AbortController();
     var timer = setTimeout(function () { ctrl.abort(); }, 40000);
     return fetch('/api/think', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: messages }),
+      body: JSON.stringify(mode ? { messages: messages, mode: mode } : { messages: messages }),
       signal: ctrl.signal
     }).then(function (r) {
       clearTimeout(timer);
@@ -425,14 +425,14 @@
       })
       .catch(function () { d._busy = false; if (row.isConnected) renderOffline(row); });
   }
-  function othersContext(d0) {
+  function othersContext(d0, big) {
     var out = [];
     state.docs.forEach(function (d) {
       if (d === d0) return;
       var t = docRows(d).map(function (r) { return text(r._blk).trim(); }).filter(Boolean).join(' ').replace(/\s+/g, ' ');
-      if (t) out.push('- ' + titleOf(d) + ': ' + t.slice(0, 320));
+      if (t) out.push('- ' + titleOf(d) + ': ' + t.slice(0, big ? 700 : 320));
     });
-    return out.slice(0, 4).join('\n').slice(0, 1100);
+    return out.slice(0, big ? 6 : 4).join('\n').slice(0, big ? 3200 : 1100);
   }
   /* Pause oder zwei, drei fertige Sätze */
   function delayFor(row) {
@@ -857,6 +857,60 @@
   });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closePops(); });
   binBtn.addEventListener('click', function () { if (state.cur) openConfirm(state.cur, binBtn, 'above'); });
+
+  /* ---------- "I'm stuck": ein Anstoß auf Knopfdruck ---------- */
+  var stuckBtn = document.getElementById('stuckBtn'), stuckMenu = document.getElementById('stuckMenu');
+  function closeStuck() { stuckMenu.hidden = true; stuckBtn.setAttribute('aria-expanded', 'false'); }
+  function stuckRow(d) {
+    var rows = docRows(d), a = document.activeElement, r = a && a.closest && a.closest('.row'), i;
+    if (r && docOf(r) === d) return r;
+    for (i = rows.length - 1; i >= 0; i--) if (text(rows[i]._blk).trim()) return rows[i];
+    return rows[rows.length - 1];
+  }
+  function askStuck(mode) {
+    var d = state.cur;
+    if (!d || d._busy || stuckBtn.disabled) return;
+    var rows = docRows(d), row = stuckRow(d), last = row, i;
+    /* Gesprächsverlauf bis zur letzten beschriebenen Zeile, nicht nur bis zum Cursor */
+    for (i = rows.length - 1; i >= 0; i--) if (text(rows[i]._blk).trim()) { last = rows[i]; break; }
+    var msgs = buildMessages(last), ctx = othersContext(d, true), note = '[They pressed "I\'m stuck".]';
+    if (!msgs.length || msgs[msgs.length - 1].role !== 'user') msgs.push({ role: 'user', text: note });
+    else msgs[msgs.length - 1].text += '\n' + note;
+    if (ctx) {
+      if (msgs[0].role === 'user') msgs[0].text = '[Other notes in this notebook]\n' + ctx + '\n\n' + msgs[0].text;
+      else msgs.unshift({ role: 'user', text: '[Other notes in this notebook]\n' + ctx });
+    }
+    d._busy = true;
+    stuckBtn.disabled = true;
+    fetchThought(msgs, mode).then(function (t) {
+      d._busy = false; stuckBtn.disabled = false;
+      if (!row.isConnected) return;
+      var n = renderNote(row, clean(t), false);
+      if (!row._snap) row._snap = text(row._blk);
+      /* Was du bestellt hast, soll man sofort lesen können: Zeile aufklappen und in Sicht holen */
+      row.classList.add('is-open');
+      updateFold(row);
+      var br = box.getBoundingClientRect(), nr = n.el.getBoundingClientRect();
+      if (nr.bottom > br.bottom - 90) box.scrollBy({ top: nr.bottom - br.bottom + 120, behavior: reduced ? 'auto' : 'smooth' });
+      else if (nr.top < br.top + 70) box.scrollBy({ top: nr.top - br.top - 90, behavior: reduced ? 'auto' : 'smooth' });
+    }).catch(function () { d._busy = false; stuckBtn.disabled = false; if (row.isConnected) renderOffline(row); });
+  }
+  stuckBtn.addEventListener('click', function () {
+    var open = stuckMenu.hidden;
+    closePops();
+    stuckMenu.hidden = !open;
+    stuckBtn.setAttribute('aria-expanded', String(open));
+    if (open) { var f = stuckMenu.querySelector('button'); if (f) f.focus({ preventScroll: true }); }
+  });
+  stuckMenu.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('button[data-mode]');
+    if (!b) return;
+    closeStuck();
+    askStuck(b.getAttribute('data-mode'));
+  });
+  document.addEventListener('pointerdown', function (e) { if (!stuckMenu.hidden && !(e.target.closest && e.target.closest('#stuck'))) closeStuck(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeStuck(); });
+
 
   /* ---------- Löschen: das Papier knüllt sich zusammen und fliegt in den Eimer ---------- */
   function cloneDoc(d) {

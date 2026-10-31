@@ -362,3 +362,33 @@ button { font: inherit; color: inherit; }
 .flyer .roller { left: 0; right: 0; top: 0; opacity: 1 !important; }
 .binfront { position: fixed; z-index: 40; pointer-events: none; line-height: 0; filter: brightness(0.8) contrast(1.1) drop-shadow(0 4px 6px rgba(0, 0, 0, 0.55)); }
 .binfront img { display: block; width: 100%; height: auto; transform-origin: 50% 100%; }
+
+/* ---------- "I'm stuck": ein Knopf gegen den Gedankenblock ---------- */
+.stuck { position: absolute; left: 50%; bottom: 1.1rem; transform: translateX(-50%); z-index: 8; display: flex; flex-direction: column; align-items: center; gap: 0.55rem; }
+.stuck__btn {
+  appearance: none; display: inline-flex; align-items: center; gap: 0.55rem; padding: 0.5rem 1.1rem 0.5rem 0.9rem; border-radius: 999px; cursor: pointer;
+  font-family: var(--font); font-size: 0.95rem; letter-spacing: 0.02em; color: #f4e7c4;
+  background: var(--cloth), linear-gradient(180deg, #5d3b22 0, #3c2415 100%); border: 1px solid rgba(255, 225, 180, 0.28);
+  box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 228, 180, 0.22);
+  transition: transform 0.18s var(--ease), box-shadow 0.2s, filter 0.2s;
+}
+.stuck__btn:hover { transform: translateY(-2px); filter: brightness(1.12); }
+.stuck__btn:active { transform: translateY(0) scale(0.97); }
+.stuck__btn[disabled] { cursor: progress; filter: brightness(0.9); transform: none; }
+.stuck__spark {
+  width: 0.95rem; height: 0.95rem; background: radial-gradient(circle, #fff3c4, #e8b94a 60%, #b8862a);
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+}
+.stuck__btn[disabled] .stuck__spark { animation: spark 0.9s ease-in-out infinite; }
+@keyframes spark { 0%, 100% { transform: scale(0.8) rotate(0); opacity: 0.7; } 50% { transform: scale(1.25) rotate(45deg); opacity: 1; } }
+.stuck__menu {
+  display: flex; flex-direction: column; min-width: 14rem; padding: 0.35rem; border-radius: 8px; background: #f1e6c6;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.5); animation: pop 0.16s var(--ease) both;
+}
+.stuck__menu[hidden] { display: none; }
+.stuck__menu button {
+  appearance: none; border: 0; background: transparent; text-align: left; padding: 0.5rem 0.75rem; border-radius: 5px; cursor: pointer;
+  font-family: var(--font); font-size: 0.95rem; letter-spacing: 0.01em; color: var(--ink); transition: background-color 0.12s;
+}
+.stuck__menu button:hover, .stuck__menu button:focus-visible { background: rgba(35, 40, 66, 0.1); }
+.stuck__menu button:active { background: rgba(35, 40, 66, 0.18); }
