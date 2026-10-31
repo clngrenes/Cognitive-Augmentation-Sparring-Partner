@@ -22,13 +22,13 @@
     return d.contentEditable === 'plaintext-only' ? 'plaintext-only' : 'true';
   })();
 
-  var PLACEHOLDER = { p: 'Schreib einen Gedanken …', h1: 'Titel', li: 'Listenpunkt' };
+  var PLACEHOLDER = { p: 'Write a thought …', h1: 'Title', li: 'List item' };
   var SEED = [
-    { type: 'h1', text: 'Unsichtbare Technik' },
-    { type: 'p', text: 'Je selbstverständlicher proaktive Systeme und IoT-Geräte werden, etwa der Aufzug im Büro oder das Thermostat zuhause, desto weniger müssen wir mit Technik interagieren. Alles wird einfach zu Daten und fließt direkt in unsere persönlichen Systeme. Manuelle Eingabe gehört damit der Vergangenheit an.',
-      notes: [{ id: 'seed-1', text: 'Mark Weiser nannte das 1991 „Ubiquitous Computing“: Technik, die verschwindet. Der Preis: Wer nichts mehr bedient, merkt auch nicht mehr, wann für ihn entschieden wird.' }] },
-    { type: 'p', text: 'Was meinst du damit?', replyTo: 'seed-1',
-      notes: [{ id: 'seed-2', text: 'Dass unsichtbare Technik nicht neutral ist: Das Thermostat, das vorausschauend heizt, hat schon entschieden, was du brauchst. Bedienen war auch ein Moment, in dem du Nein sagen konntest.' }] },
+    { type: 'h1', text: 'Invisible technology' },
+    { type: 'p', text: 'The more self-evident proactive systems and IoT devices become, like the elevator at the office or the thermostat at home, the less we have to interact with technology. Everything turns into data and flows straight into our personal systems. Manual input belongs to the past.',
+      notes: [{ id: 'seed-1', text: 'Mark Weiser called this "ubiquitous computing" in 1991: technology that disappears. The price is that when nothing needs operating, you also stop noticing when decisions are made for you.' }] },
+    { type: 'p', text: 'What do you mean by that?', replyTo: 'seed-1',
+      notes: [{ id: 'seed-2', text: 'That invisible technology is not neutral: a thermostat that heats ahead of time has already decided what you need. Operating a device used to be a moment where you could say no.' }] },
     { type: 'p', text: '' }
   ];
 
@@ -176,7 +176,17 @@
 
   /* ---------- Blöcke ---------- */
   function replyPlaceholder(row) {
-    return row._quote ? 'Zu „' + shorten(row._quote, 38) + '“ …' : 'Deine Antwort …';
+    return row._quote ? 'Your take on this …' : 'Your reply …';
+  }
+  /* Bezug: die markierte Stelle steht klein über deiner Antwort, in der Farbe des Markers */
+  function setQuote(row, quote) {
+    row._quote = quote || null;
+    var body = row._blk.parentNode, ref = row._ref;
+    if (quote) {
+      if (!ref) { ref = row._ref = el('div', 'ref'); body.insertBefore(ref, row._blk); }
+      ref.textContent = quote;
+    } else if (ref) { ref.remove(); row._ref = null; }
+    if (row._replyTo) row._blk.dataset.placeholder = replyPlaceholder(row);
   }
   function setType(row, type) {
     row.dataset.type = type;
@@ -189,9 +199,9 @@
     var blk = el('div', 'blk');
     blk.contentEditable = plain;
     blk.setAttribute('role', 'textbox');
-    blk.setAttribute('aria-label', 'Dein Gedanke');
+    blk.setAttribute('aria-label', 'Your thought');
     blk.spellcheck = false;
-    blk.lang = 'de';
+    blk.lang = 'en';
     body.append(blk);
     me.append(body);
     var ai = el('div', 'cell cell--ai');
@@ -234,7 +244,7 @@
      1. Dein Text läuft Zeile für Zeile bis zur letzten Linie und setzt sich dann auf der nächsten Seite fort.
      2. Ein Gedanke der KI braucht Platz neben deinem Block. Reicht er nicht mehr, beginnt dein nächster Block
         auf der nächsten Seite. Umgeblättert wird erst, wenn du weiterschreibst, damit du die KI noch schreiben siehst. */
-  var AI_LINES = 8;
+  var AI_LINES = 3;
   function aiExtra(row) {
     if (row.dataset.type === 'h1' || row._ai.childNodes.length) return 0;
     return Math.max(0, (state.single ? AI_LINES + 3 : AI_LINES) - Math.round(row.offsetHeight / state.L));
@@ -403,7 +413,7 @@
     var art = el('p', 'note');
     art.tabIndex = 0;
     art.setAttribute('role', 'button');
-    art.title = 'Anklicken zum Antworten, mit gedrückter Maustaste Stellen markieren';
+    art.title = 'Click to reply, drag to mark a passage';
     var n = { id: id || newId(), row: row, text: txt, el: art, mk: [], replyRows: [] };
     n.words = buildWords(art, txt, instant);
     (marks || []).forEach(function (m) { for (var i = m[0]; i <= m[1]; i++) n.mk[i] = true; });
@@ -416,13 +426,20 @@
     return n;
   }
   function renderOffline(row) {
-    var p = el('p', 'note note--off', 'Keine Verbindung zur KI.');
+    var p = el('p', 'note note--off', 'No connection to the AI.');
     row._ai.appendChild(p);
     setTimeout(function () { p.remove(); if (row.isConnected) paginate(docOf(row)); }, 6000);
   }
 
   /* Gesprächsverlauf dieser Notiz bis einschließlich dieser Zeile */
-  function buildMessages(upTo) {
+  function notesOf(c) {
+    var out = [];
+    c.rows.forEach(function (r) {
+      r._ai.querySelectorAll('.note:not(.note--off)').forEach(function (n) { out.push(n._note.text); });
+    });
+    return out;
+  }
+  function buildMessages(upTo, seen) {
     var msgs = [];
     function push(role, t) {
       var last = msgs[msgs.length - 1];
@@ -430,16 +447,25 @@
     }
     var list = logicalRows(docOf(upTo));
     for (var i = 0; i < list.length; i++) {
-      var c = list[i], t = c.text.trim(), isLast = c.rows.indexOf(upTo) >= 0;
-      if (t) {
-        var line = c.head.dataset.type === 'h1' ? 'Titel: ' + t : t;
-        if (c.head._quote) line = '[Bezieht sich auf deine Stelle: „' + c.head._quote + '“]\n' + line;
-        push('user', line);
+      var c = list[i], isLast = c.rows.indexOf(upTo) >= 0;
+      var t = (isLast ? chainTextUpTo(upTo).text : c.text).trim();
+      var notes = notesOf(c);
+      function line(s) {
+        var l = c.head.dataset.type === 'h1' ? 'Title: ' + s : s;
+        if (isLast && c.head._replyTo) l = '[Direct reply to your note]\n' + l;
+        if (c.head._quote) l = '[Refers to your passage: "' + c.head._quote + '"]\n' + l;
+        return l;
       }
+      if (isLast && notes.length && seen > 0 && seen < t.length) {
+        /* in diesem Absatz hat die KI schon etwas gesagt: davor, ihr Gedanke, dann das Neue */
+        push('user', line(t.slice(0, seen).trim()));
+        notes.forEach(function (n) { push('model', n); });
+        push('user', '[New text since your last note]\n' + t.slice(seen).trim());
+        break;
+      }
+      if (t) push('user', line(t));
       if (isLast) break;
-      c.rows.forEach(function (r) {
-        r._ai.querySelectorAll('.note:not(.note--off)').forEach(function (n) { push('model', n._note.text); });
-      });
+      notes.forEach(function (n) { push('model', n); });
     }
     var total = 0;
     msgs = msgs.slice(-24).map(function (m) { return { role: m.role, text: m.text.slice(0, 1500) }; });
@@ -447,9 +473,9 @@
   }
   function clean(t) {
     t = String(t || '').replace(/^\s*(Du|Beitrag)\s*:\s*/i, '').replace(/[*_`#>]+/g, '').replace(/\s+/g, ' ').trim();
-    if (t.length > 320) {
-      var cut = t.slice(0, 320), end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '), cut.lastIndexOf('! '));
-      t = end > 80 ? cut.slice(0, end + 1) : cut.slice(0, cut.lastIndexOf(' ')) + '…';
+    if (t.length > 230) {
+      var cut = t.slice(0, 230), end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('? '), cut.lastIndexOf('! '));
+      t = end > 60 ? cut.slice(0, end + 1) : cut.slice(0, cut.lastIndexOf(' ')) + '…';
     }
     return t;
   }
@@ -470,12 +496,40 @@
       return j.text;
     });
   }
-  function requestThought(row) {
-    var chain = chainTextUpTo(row), txt = chain.text.trim();
-    if (!chain.head || chain.head.dataset.type === 'h1' || !txt) return;
-    fetchThought(buildMessages(row))
-      .then(function (t) { if (row.isConnected) renderNote(row, clean(t), false); })
-      .catch(function () { if (row.isConnected) renderOffline(row); });
+  /* Die KI wartet nicht auf Enter. Sie meldet sich, wenn du eine Pause machst und genug Neues dasteht,
+     und das Modell entscheidet selbst, ob es etwas Wertvolles zu sagen hat (sonst antwortet es mit SKIP). */
+  var AUTO = { idle: 2600, idleSentence: 1500, idleEnter: 900, idleReply: 1300, minChars: 48, minReply: 6, minGap: 6000 };
+  function scheduleThought(row, delay) {
+    var head = chainTextUpTo(row).head;
+    if (!head) return;
+    clearTimeout(head._tt);
+    head._ttRow = row;
+    head._tt = setTimeout(function () { maybeThink(head._ttRow); }, delay);
+  }
+  function maybeThink(row) {
+    if (!row.isConnected) return;
+    var chain = chainTextUpTo(row), head = chain.head, txt = chain.text.trim();
+    if (!head || head.dataset.type === 'h1' || !txt) return;
+    var doc = docOf(row), seen = Math.min(head._seen || 0, chain.text.length);
+    var fresh = chain.text.length - seen;
+    if (fresh < (head._replyTo ? AUTO.minReply : AUTO.minChars)) return;
+    var wait = (doc._lastAsk || 0) + AUTO.minGap - Date.now();
+    if (doc._busy || wait > 0) { scheduleThought(row, Math.max(600, wait)); return; }
+    head._seen = chain.text.length;
+    doc._lastAsk = Date.now();
+    doc._busy = true;
+    var msgs = buildMessages(row, seen);
+    fetchThought(msgs)
+      .then(function (t) {
+        doc._busy = false;
+        if (!row.isConnected || /^\W*SKIP\W*$/i.test(t.trim())) return;
+        renderNote(row, clean(t), false);
+      })
+      .catch(function () { doc._busy = false; if (row.isConnected) renderOffline(row); });
+  }
+  function delayFor(row, blkText) {
+    if (row._replyTo) return AUTO.idleReply;
+    return /[.!?…]["”')\]]?\s*$/.test(blkText) ? AUTO.idleSentence : AUTO.idle;
   }
 
   /* Antwort auf einen Gedanken, optional zu einer markierten Stelle */
@@ -484,8 +538,7 @@
     if (existing) { reveal(existing); return; }
     var r = makeRow('p');
     r._replyTo = note;
-    r._quote = quote || null;
-    r._blk.dataset.placeholder = replyPlaceholder(r);
+    setQuote(r, quote);
     var after = note.row;
     note.replyRows = note.replyRows.filter(function (x) { return x.isConnected; });
     note.replyRows.forEach(function (x) { if (x.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_PRECEDING) after = x; });
@@ -528,6 +581,35 @@
     if (!allOn) openReply(n, n.words.slice(a, b + 1).join(' '));
     return true;
   }
+  /* Markierung zurücknehmen: leere Antwortblöcke zu dieser Stelle verschwinden mit ihr */
+  function dropEmptyReplies(n, quote) {
+    n.replyRows.slice().forEach(function (r) {
+      if (r.isConnected && r._quote && (quote == null || r._quote === quote) && !text(r._blk).trim()) removeRow(r);
+    });
+    n.replyRows = n.replyRows.filter(function (r) { return r.isConnected; });
+  }
+  function unmarkRun(n, i) {
+    var quote = runAround(n, i), a = i, b = i;
+    while (a > 0 && n.mk[a - 1]) a--;
+    while (b < n.words.length - 1 && n.mk[b + 1]) b++;
+    for (var k = a; k <= b; k++) n.mk[k] = false;
+    applyMarks(n);
+    dropEmptyReplies(n, quote);
+    save();
+  }
+  function clearMarks(sp) {
+    var any = false;
+    Array.prototype.forEach.call(sp.el.querySelectorAll('.note'), function (el0) {
+      var n = el0._note;
+      if (!n || !n.mk.some(Boolean)) return;
+      any = true;
+      n.mk = [];
+      applyMarks(n);
+      dropEmptyReplies(n, null);
+    });
+    if (any) save();
+    return any;
+  }
   function runAround(n, i) {
     var a = i, b = i;
     while (a > 0 && n.mk[a - 1]) a--;
@@ -543,10 +625,10 @@
     var before = full.slice(0, off), after = full.slice(off);
     row._blk.textContent = before;
     var nr = addRow(row, row.dataset.type === 'li' ? 'li' : 'p', after, row.parentNode);
-    requestThought(row);
+    scheduleThought(row, AUTO.idleEnter);
     var sp = spreadOf(row);
     var free = state.lines - Math.round((relTop(row, sp) + row.offsetHeight) / state.L);
-    var need = aiExtra(row) + 1;
+    var need = 3;
     var doc = docOf(row), idx = doc.spreads.indexOf(sp);
     if (!after && free < need && state.ready) {
       /* kein Platz mehr für den Gedanken der KI: der nächste Block liegt schon auf der folgenden Seite */
@@ -594,6 +676,9 @@
       }
     }
     paginate(docOf(row));
+    var ae = document.activeElement, arow = ae && ae.closest && ae.closest('.row');
+    if (arow && arow._blk === ae) row = arow;
+    scheduleThought(row, delayFor(row, text(row._blk)));
     saveSoon();
   });
 
@@ -703,11 +788,18 @@
   book.addEventListener('click', function (e) {
     if (justMarked) return;
     var noteEl = e.target.closest && e.target.closest('.note');
-    if (!noteEl || !noteEl._note) return;
+    if (!noteEl || !noteEl._note) {
+      /* ein Klick auf die leere rechte Seite nimmt die Markierungen zurück */
+      var cs = curSpread();
+      if (cs && !state.single && !(e.target.closest && e.target.closest('.blk, button, .ftab, .del'))) {
+        var br = book.getBoundingClientRect();
+        if (e.clientX - br.left > br.width / 2) clearMarks(cs);
+      }
+      return;
+    }
     var n = noteEl._note, w = e.target.closest('.w');
-    var quote = null;
-    if (w && w.classList.contains('mk')) quote = runAround(n, Array.prototype.indexOf.call(noteEl.children, w));
-    openReply(n, quote);
+    if (w && w.classList.contains('mk')) { unmarkRun(n, Array.prototype.indexOf.call(noteEl.children, w)); return; }
+    openReply(n, null);
   });
 
   /* ---------- Doppelseiten ---------- */
@@ -715,7 +807,7 @@
     var el0 = el('div', 'spread');
     var sheet = el('div', 'sheet');
     sheet.tabIndex = -1;
-    sheet.setAttribute('aria-label', 'Notizbuchseite');
+    sheet.setAttribute('aria-label', 'Notebook page');
     var nl = el('span', 'pgno pgno--l'), nr = el('span', 'pgno pgno--r');
     el0.append(sheet, nl, nr);
     var sp = { doc: doc, el: el0, sheet: sheet, nl: nl, nr: nr };
@@ -745,9 +837,8 @@
       var parent = state.noteIndex[x.id];
       if (!parent) return;
       x.row._replyTo = parent;
-      x.row._quote = x.quote || null;
       parent.replyRows.push(x.row);
-      x.row._blk.dataset.placeholder = replyPlaceholder(x.row);
+      setQuote(x.row, x.quote);
     });
     if (!docRows(doc).length) addRow(null, 'p', '', doc.spreads[0].sheet);
   }
@@ -777,7 +868,7 @@
     var list = logicalRows(doc), i, t;
     for (i = 0; i < list.length; i++) if (list[i].head.dataset.type === 'h1' && (t = list[i].text.trim())) return shorten(t);
     for (i = 0; i < list.length; i++) if ((t = list[i].text.trim())) return shorten(t);
-    return 'neu';
+    return 'new';
   }
   function makeTab(doc) {
     var b = el('button', 'ftab');
@@ -792,9 +883,8 @@
     var tabH = Math.max(54, Math.min(150, Math.floor((avail - gap * n) / (n + 1))));
     docs.forEach(function (d, i) {
       if (!d.tab) d.tab = makeTab(d);
-      var b = d.tab, lab = b.firstChild, title = titleOf(d);
-      if (lab.textContent !== title) lab.textContent = title;
-      b.title = title;
+      var b = d.tab, lab = b.firstChild;
+      if (!state.flip || !b._titled) { var title = titleOf(d); b._titled = true; if (lab.textContent !== title) lab.textContent = title; b.title = title; }
       b.style.setProperty('--c', TAB_COLORS[i % TAB_COLORS.length]);
       b.style.setProperty('--tilt', ((i % 3) - 1) * 0.55 + 'deg');
       b.style.top = 26 + i * (tabH + gap) + 'px';
@@ -805,14 +895,14 @@
         var fresh = !!b.dataset.side;
         b.dataset.side = side;
         (side === 'l' ? tabsL : tabsR).appendChild(b);
-        if (fresh && !reduced) { b.classList.remove('is-land'); void b.offsetWidth; b.classList.add('is-land'); }
+        if (fresh && !reduced) { b.classList.remove('is-land', 'is-land2'); b.classList.add(b._alt ? 'is-land' : 'is-land2'); b._alt = !b._alt; }
       }
     });
     if (!state.spare) {
       state.spare = el('button', 'ftab ftab--spare');
       state.spare.type = 'button';
-      state.spare.appendChild(el('span', 'ftab__label', 'neu'));
-      state.spare.setAttribute('aria-label', 'Neue Notiz anlegen');
+      state.spare.appendChild(el('span', 'ftab__label', 'new'));
+      state.spare.setAttribute('aria-label', 'Start a new note');
       state.spare.addEventListener('click', addDoc);
       tabsR.appendChild(state.spare);
     }
@@ -873,7 +963,7 @@
   /* A kommt im Buch vor B. reverse = zurückblättern */
   function playTurn(A, B, reverse, to) {
     var W = book.clientWidth, H = book.clientHeight, single = state.single, half = single ? W : W / 2;
-    var N = single ? 7 : 14, sw = half / N;
+    var N = window.__N || (single ? 6 : 10), sw = half / N;
     var leaf = el('div', 'leaf');
     leaf.style.width = half + 'px';
     leaf.style.left = (single ? 0 : W - half) + 'px';
@@ -888,7 +978,6 @@
       fc.style.cssText = 'position:absolute;top:0;width:' + W + 'px;height:' + H + 'px;left:' + (single ? -k * sw : -(W - half) - k * sw) + 'px';
       var fs = el('div', 'shade');
       front.append(fp, fc, fs);
-      st.appendChild(front);
       var back = null, bs = null;
       if (!single) {
         back = el('div', 'face face--back');
@@ -900,6 +989,7 @@
         back.append(bp, bc, bs);
         st.appendChild(back);
       }
+      st.appendChild(front);
       parent.appendChild(st);
       strips.push({ el: st, front: front, back: back, fs: fs, bs: bs });
       parent = st;
@@ -933,11 +1023,10 @@
         S.el.style.transform = 'rotateY(' + (-rotD) + 'deg)';
         var a0 = Math.max(0, Math.min(180, angles[i])), a1 = Math.max(0, Math.min(180, angles[i + 1]));
         var s0 = 0.46 * Math.sin(a0 * Math.PI / 180), s1 = 0.46 * Math.sin(a1 * Math.PI / 180);
-        var bg = 'linear-gradient(90deg,rgba(28,16,4,' + s0.toFixed(3) + '),rgba(28,16,4,' + s1.toFixed(3) + '))';
-        var mid = (a0 + a1) / 2, showFront = mid <= 90;
+        var mid = (a0 + a1) / 2, showFront = mid <= 90, sh = ((s0 + s1) / 2).toFixed(3);
         S.front.style.visibility = (showFront && !(single && mid > 90)) ? 'visible' : 'hidden';
-        S.fs.style.background = bg;
-        if (S.back) { S.back.style.visibility = showFront ? 'hidden' : 'visible'; S.bs.style.background = 'linear-gradient(270deg,rgba(28,16,4,' + s0.toFixed(3) + '),rgba(28,16,4,' + s1.toFixed(3) + '))'; }
+        S.fs.style.opacity = sh;
+        if (S.back) S.bs.style.opacity = sh;
       }
       cast.style.opacity = (0.8 * Math.sin(Math.PI * e)).toFixed(3);
     }
@@ -977,13 +1066,14 @@
       if (opts.select) { selectRow(opts.select); return; }
       if (opts.focus && opts.focus.isConnected) placeCaret(opts.focus._blk, opts.off == null ? Infinity : opts.off);
     }
+    /* das Ziel ist schon die aufgeschlagene (oder gerade aufgehende) Seite: sofort dort weiterschreiben */
+    if (idx === state.cur && !state.queued) { if (opts.focus === state.pending) state.pending = null; syncChrome(); arrive(); return; }
     if (state.flip) {
       /* es wird gerade geblättert: das laufende Blatt schneller zu Ende führen, dann weiter */
       state.flip.speedUp();
       state.queued = { idx: idx, opts: opts };
       return;
     }
-    if (idx === state.cur) { syncChrome(); arrive(); return; }
     var from = list[state.cur], to = list[idx], forward = idx > state.cur;
     clearSel();
     if (document.activeElement && document.activeElement.blur && !opts.focus) document.activeElement.blur();
@@ -1006,12 +1096,12 @@
   function handleDelete() {
     if (!delBtn.classList.contains('is-armed')) {
       delBtn.classList.add('is-armed');
-      delBtn.textContent = 'Wirklich entfernen?';
-      setTimeout(function () { delBtn.classList.remove('is-armed'); delBtn.textContent = 'Notiz entfernen'; }, 3000);
+      delBtn.textContent = 'Really remove?';
+      setTimeout(function () { delBtn.classList.remove('is-armed'); delBtn.textContent = 'Remove note'; }, 3000);
       return;
     }
     delBtn.classList.remove('is-armed');
-    delBtn.textContent = 'Notiz entfernen';
+    delBtn.textContent = 'Remove note';
     var doc = curSpread().doc;
     finishFlip();
     state.pending = null;

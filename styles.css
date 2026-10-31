@@ -159,6 +159,12 @@ button { font: inherit; color: inherit; }
   content: attr(data-placeholder); color: var(--muted); text-shadow: none; pointer-events: none;
 }
 .row[data-type="h1"] .blk { font-size: calc(var(--fs) * 1.32); font-weight: 600; line-height: calc(var(--L) * 2); min-height: calc(var(--L) * 2); }
+.ref {
+  height: var(--L); line-height: var(--L); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--font); font-size: calc(var(--fs) * 0.82); color: var(--muted); letter-spacing: 0.01em;
+  padding-left: 0.6rem; background: linear-gradient(90deg, var(--mk) 0, var(--mk) 3px, transparent 3px); user-select: none;
+}
+.ref::before { content: '\201C'; } .ref::after { content: '\201D'; }
 .row[data-type="li"] .body { padding-left: 1.6rem; }
 .row[data-cont] .body { padding-left: 0.5rem; }
 .row[data-cont] .body::before { display: none; }
@@ -166,6 +172,9 @@ button { font: inherit; color: inherit; }
   content: ''; position: absolute; left: 0.7rem; top: calc(var(--L) / 2 - 3px); width: 6px; height: 6px; border-radius: 50%; background: var(--ink); opacity: 0.8;
 }
 ::selection { background: rgba(66, 88, 140, 0.28); }
+/* Mit dem Marker über die Schrift der KI ziehen: sofort wie Textmarker, nicht blau */
+.note ::selection, .note::selection { background: var(--mk); color: inherit; text-shadow: none; }
+.note ::-moz-selection { background: var(--mk); color: inherit; }
 
 /* Gedanken der KI: werden Wort für Wort hingeschrieben, mit einem Tintenpunkt am Rand als Absatzzeichen */
 .note { position: relative; margin: 0; color: var(--ink-ai); cursor: inherit; border-radius: 4px; }
@@ -193,11 +202,11 @@ button { font: inherit; color: inherit; }
 /* ---------- Blättern ---------- */
 .leafslot { position: absolute; inset: 0; perspective: 2800px; perspective-origin: 50% 36%; pointer-events: none; z-index: 6; }
 .leaf { position: absolute; top: 0; height: 100%; transform-style: preserve-3d; }
-.strip { position: absolute; top: 0; height: 100%; transform-origin: left center; transform-style: preserve-3d; }
+.strip { position: absolute; top: 0; height: 100%; transform-origin: left center; transform-style: preserve-3d; will-change: transform; }
 .face { position: absolute; inset: 0; overflow: hidden; }
 .face--back { transform: scaleX(-1); }
 .face .spread { visibility: inherit; pointer-events: none; }
-.shade { position: absolute; inset: 0; pointer-events: none; }
+.shade { position: absolute; inset: 0; pointer-events: none; background: rgb(28, 16, 4); opacity: 0; }
 .cast {
   position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none;
   background: radial-gradient(ellipse 60% 70% at 50% 55%, rgba(20, 10, 0, 0.5), rgba(20, 10, 0, 0) 100%);
@@ -253,6 +262,8 @@ button { font: inherit; color: inherit; }
 .ftab--spare { background: #efe6cb; color: rgba(35, 40, 66, 0.55); }
 .ftab--spare::after { background: linear-gradient(105deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 40%, rgba(0, 0, 0, 0.06)); }
 .ftab.is-land { animation: land 0.45s var(--ease) both; }
+.ftab.is-land2 { animation: land2 0.45s var(--ease) both; }
+@keyframes land2 { from { opacity: 0; transform: translateY(-5px) rotate(var(--tilt, 0deg)); } to { opacity: 1; transform: rotate(var(--tilt, 0deg)); } }
 @keyframes land { from { opacity: 0; transform: translateY(-5px) rotate(var(--tilt, 0deg)); } to { opacity: 1; transform: rotate(var(--tilt, 0deg)); } }
 
 .del {

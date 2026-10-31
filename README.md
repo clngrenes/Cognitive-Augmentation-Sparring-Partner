@@ -1,45 +1,44 @@
 # Sparring
 
-Prototyp eines Schreibinterfaces: ein altes Notizbuch, in dem du links schreibst und rechts eine KI mitdenkt. Bei jedem Enter schreibt sie einen kurzen Nebengedanken zu dem, was du gerade geschrieben hast, in derselben Handschrift. Sie schreibt nie in deinen Text.
+Prototype of a writing interface: a vintage notebook where you write on the left and an AI thinks along on the right. When it has something worth adding, it writes one short thought in the margin, in the same handwriting, and gradually, word by word. It never writes into your text.
 
-Reines HTML, CSS und JavaScript plus eine Vercel-Funktion (`api/think.js`) für die KI.
+Plain HTML, CSS and JavaScript plus one Vercel function (`api/think.js`) that talks to Gemini.
 
-## Bedienung
+## How it works
 
-- Enter beendet einen Block, die KI schreibt rechts einen Gedanken dazu, Wort für Wort.
-- Rechts ist der Cursor ein Textmarker: Eine Stelle im Gedanken der KI mit gedrückter Maustaste anstreichen, und darunter öffnet sich ein Block für deinen Kommentar zu genau dieser Stelle. Die KI sieht die Stelle und geht darauf ein. Ein Klick auf den Gedanken antwortet ohne Stelle. Erneut anstreichen nimmt die Markierung zurück.
-- Zwischen zwei Gedanken bleibt eine freie Zeile, dazu ein kleiner Tintenpunkt am Anfang. Keine Trennlinie, denn die gibt es im Notizbuch nicht.
-- Blättern: auf die aufgerollten Ecken unten klicken, mit `Bild auf` und `Bild ab`, auf einen Reiter klicken oder auf dem Handy wischen. Das Blatt biegt sich dabei wie Papier.
-- Jede Notiz hat einen Klebereiter am Buchrand. Notizen vor der aufgeschlagenen Stelle hängen links, die danach rechts. Der cremefarbene Reiter „neu“ legt eine neue Notiz an.
-- `# ` macht einen Titel, `- ` eine Liste.
-- Esc markiert einen Block (Pfeile bewegen die Auswahl, Entf löscht, Enter schreibt weiter).
+- There is no send button and no need to press Enter. Write. When you pause after a sentence (or after a few seconds mid-sentence) and there is enough new text, the AI looks at it and decides itself whether it can add something valuable. If not, it stays silent (the model answers `SKIP`). Enter simply starts a new paragraph.
+- The notes are deliberately short: one sentence, at most two, no questions, no praise. A concept, a case, a consequence or the strongest counterargument.
+- The cursor on the right page is a highlighter. Drag over a passage of an AI note to mark it. A reply block opens on the left, quoting the passage, and the AI sees exactly what you refer to. Click a marked passage, or the empty right page, to take marks back (empty reply blocks disappear with them). Click a note without dragging to reply to the whole note.
+- Turning pages: click the curled corners, use `Page Up` and `Page Down`, click a tab, or swipe on a phone. The leaf bends like paper.
+- Every note has a sticky tab on the edge of the book. Notes before the open spread hang on the left, later ones on the right. The cream "new" tab starts a note.
+- `# ` makes a title, `- ` a list. `Esc` selects a block (arrows move, `Del` removes, `Enter` continues writing).
 
-## Wann eine neue Seite beginnt
+## When a new page starts
 
-1. Dein Text läuft Zeile für Zeile bis zur letzten Linie und setzt sich auf der nächsten Seite fort. Ein langer Absatz springt nicht als Ganzes.
-2. Der Gedanke der KI braucht Platz neben deinem Block. Reicht der Rest der Seite dafür nicht mehr, beginnt dein nächster Block oben auf der nächsten Seite. Du siehst die KI noch schreiben, die Seite wird erst umgeschlagen, wenn du weiterschreibst oder die Ecke anklickst.
-3. Rutscht ein Block samt Gedanke auf die nächste Seite, blättert das Buch mit.
+1. Your text runs line by line to the last rule and continues on the next page. A long paragraph never jumps as a whole.
+2. If there is no room left beside your block for a note, your next block starts at the top of the next page. The page turns when you keep writing or click the corner.
+3. If a block with its note slides to the next page, the book turns with it.
 
-Notizen liegen nur im Browser (`localStorage`). Nichts wird auf einem Server gespeichert.
+Notes live only in your browser (`localStorage`). Nothing is stored on a server.
 
-## KI einrichten
+## Setting up the AI
 
-Die Funktion `api/think.js` ruft Gemini auf. Der Schlüssel steht **nie** im Code, sondern nur als Umgebungsvariable in Vercel:
+The function `api/think.js` calls Gemini. The key is **never** in the code, only an environment variable in Vercel:
 
-1. Vercel → Projekt → Settings → Environment Variables
-2. `GEMINI_API_KEY` mit deinem Schlüssel anlegen (Production, Preview, Development)
-3. Optional `GEMINI_MODEL` setzen (Standard: `gemini-3.1-flash-lite-preview`, schnell mit etwa einer Sekunde Antwortzeit. Für tiefere, aber langsamere Beiträge `gemini-3.1-pro-preview` setzen. Bei fehlendem Zugriff oder Limit fällt die Funktion nacheinander auf `gemini-3-flash-preview`, `gemini-3.1-pro-preview` und `gemini-2.5-flash` zurück)
-4. Neu deployen, damit die Variable greift
+1. Vercel → Project → Settings → Environment Variables
+2. Add `GEMINI_API_KEY` with your key (Production, Preview, Development)
+3. Optionally set `GEMINI_MODEL` (default: `gemini-3.1-flash-lite-preview`, about one second per answer. Set `gemini-3.1-pro-preview` for deeper but slower notes. On missing access or rate limits the function falls back to `gemini-3-flash-preview`, `gemini-3.1-pro-preview` and `gemini-2.5-flash`)
+4. Redeploy so the variable takes effect
 
-Ohne Schlüssel zeigt die Seite „Keine Verbindung zur KI“. Die Funktion begrenzt Anfragen pro IP und die Länge der Eingabe.
+Without a key the page shows "No connection to the AI". The function limits requests per IP and the input length.
 
-## Interaktionsprinzipien
+## Principles
 
-1. Die KI spricht erst, wenn du einen Block abschließt, nie mitten im Satz.
-2. Kurz: höchstens zwei Sätze. Die KI fügt Wissen hinzu (Konzepte, Fälle, Folgen, Gegenargumente) statt Fragen zu stellen, und sie lobt oder bewertet nicht.
-3. Kein Einfügen-Knopf: Der Text bleibt deiner.
-4. Beide schreiben in derselben Schrift und Größe. Nur die Tinte unterscheidet sich (Blauschwarz für dich, Rotbraun für die KI).
+1. The AI never speaks mid-sentence. It waits for a pause and stays silent when it has nothing valuable to add.
+2. Short: at most two sentences. It adds knowledge (concepts, cases, consequences, counterarguments) instead of asking questions, and it neither praises nor judges.
+3. There is no insert button: the text stays yours.
+4. You and the AI write in the same handwriting and size. Only the ink differs (blue-black for you, red-brown for the AI).
 
-## Schrift
+## Font
 
-[Klee One](https://fonts.google.com/specimen/Klee+One) von Fontworks, lizenziert unter der SIL Open Font License 1.1. Die Dateien liegen lokal in `fonts/`, es werden keine Schriften von fremden Servern geladen.
+[Klee One](https://fonts.google.com/specimen/Klee+One) by Fontworks, licensed under the SIL Open Font License 1.1. The files are served locally from `fonts/`, no fonts are loaded from third-party servers.
